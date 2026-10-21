@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "On the Way",
+    "slug": "on-the-way",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "updates": {
+      "enabled": false,
+      "fallbackToCacheTimeout": 0
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.ontheway",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to find the best drop/pick location for your journey.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to find the best drop/pick location for your journey."
+      }
+    },
+    "android": {
+      "package": "com.ontheway.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow On the Way to access your location"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "72d69574-0f35-4bf3-8738-11aa32c00c1a"
+      }
+    }
+  }
+}

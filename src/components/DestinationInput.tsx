@@ -1,11 +1,19 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { GooglePlacesAutocomplete, GooglePlacesAutocompleteRef } from 'react-native-google-places-autocomplete';
 import * as Location from 'expo-location';
 import type { LocationGeocodedAddress } from 'expo-location';
 import { Coordinates } from '../models';
 import { CONFIG } from '../constants/config';
+import { showAlert } from '../utils/alert';
 
+// Places API (New) supports CORS, so the same endpoint works on native and web
+const PLACES_REQUEST_URL = {
+    url: 'https://places.googleapis.com',
+    useOnPlatform: 'all' as const,
+};
+// Only request the fields we use (keeps Place Details in the cheaper SKU)
+const PLACE_DETAILS_FIELDS = 'id,location,formattedAddress';
 
 function formatGeocodedAddress(addr: LocationGeocodedAddress): string {
     if (addr.formattedAddress) return addr.formattedAddress;
@@ -115,7 +123,7 @@ export function DestinationInput({
             const { status } = await Location.requestForegroundPermissionsAsync();
             
             if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Location permission is required to use current location.');
+                showAlert('Permission needed', 'Location permission is required to use current location.');
                 setLoadingLocation(null);
                 return;
             }
@@ -176,8 +184,8 @@ export function DestinationInput({
         } catch (err) {
             console.error('Error getting location:', err);
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            Alert.alert(
-                'Error', 
+            showAlert(
+                'Error',
                 `Could not get current location: ${errorMessage}. Please try again or enter address manually.`
             );
         } finally {
@@ -191,12 +199,13 @@ export function DestinationInput({
         details: any | null,
         onChange: (coord: Coordinates | null, text?: string) => void
     ) => {
-        if (details?.geometry?.location) {
+        // Places API (New) details: location.latitude / location.longitude
+        if (details?.location) {
             const coords: Coordinates = {
-                lat: details.geometry.location.lat,
-                lon: details.geometry.location.lng,
+                lat: details.location.latitude,
+                lon: details.location.longitude,
             };
-            const text = details?.formatted_address ?? data?.description ?? '';
+            const text = details?.formattedAddress ?? data?.description ?? '';
             onChange(coords, text);
         }
     };
@@ -217,8 +226,11 @@ export function DestinationInput({
                     }}
                     query={{
                         key: CONFIG.GOOGLE_MAPS_API_KEY,
-                        language: 'en',
+                        languageCode: 'en',
                     }}
+                    isNewPlacesAPI={true}
+                    requestUrl={PLACES_REQUEST_URL}
+                    fields={PLACE_DETAILS_FIELDS}
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidDriverStart && styles.autocompleteInputInvalid],
@@ -261,8 +273,11 @@ export function DestinationInput({
                     }}
                     query={{
                         key: CONFIG.GOOGLE_MAPS_API_KEY,
-                        language: 'en',
+                        languageCode: 'en',
                     }}
+                    isNewPlacesAPI={true}
+                    requestUrl={PLACES_REQUEST_URL}
+                    fields={PLACE_DETAILS_FIELDS}
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidDriverDestination && styles.autocompleteInputInvalid],
@@ -305,8 +320,11 @@ export function DestinationInput({
                     }}
                     query={{
                         key: CONFIG.GOOGLE_MAPS_API_KEY,
-                        language: 'en',
+                        languageCode: 'en',
                     }}
+                    isNewPlacesAPI={true}
+                    requestUrl={PLACES_REQUEST_URL}
+                    fields={PLACE_DETAILS_FIELDS}
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidPassengerHome && styles.autocompleteInputInvalid],
@@ -413,5 +431,8 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
         maxHeight: 200,
+        // On web the result list's ScrollView shrinks to 0 height inside the
+        // auto-height container, hiding the suggestions
+        ...(Platform.OS === 'web' ? { flexShrink: 0 } : null),
     },
 });

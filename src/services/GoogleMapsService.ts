@@ -35,9 +35,9 @@ interface RoutesApiRoute {
 
 export class GoogleMapsService {
   private apiKey: string;
-  private baseUrl = "https://maps.googleapis.com/maps/api";
   private routesUrl =
     "https://routes.googleapis.com/directions/v2:computeRoutes";
+  private placesUrl = "https://places.googleapis.com/v1/places:searchNearby";
 
   constructor(apiKey: string) {
     // Application Security Requirement: API key passed as parameter (from environment), parameterized queries for all API calls
@@ -75,27 +75,8 @@ export class GoogleMapsService {
     placeTypes: string[],
     radius: number,
   ): Promise<PlaceResult[]> {
-    // Search for all types in parallel
-    const searchPromises = placeTypes.map((type) =>
-      this.nearbySearch(location, type, radius),
-    );
-
-    const allResults = await Promise.all(searchPromises);
-
-    // Combine results and remove duplicates by place ID
-    const seenIds = new Set<string>();
-    const uniqueResults: PlaceResult[] = [];
-
-    for (const results of allResults) {
-      for (const place of results) {
-        if (!seenIds.has(place.id)) {
-          seenIds.add(place.id);
-          uniqueResults.push(place);
-        }
-      }
-    }
-
-    return uniqueResults;
+    // Places API (New) accepts all types in a single request
+    return this.nearbySearch(location, placeTypes, radius);
   }
 
   /**
@@ -117,7 +98,7 @@ export class GoogleMapsService {
 
     // Search near each sampled point
     for (const point of sampledPoints) {
-      const nearby = await this.nearbySearch(point, placeType, 100);
+      const nearby = await this.nearbySearch(point, [placeType], 100);
 
       for (const place of nearby) {
         if (!seenIds.has(place.id)) {
@@ -303,57 +284,48 @@ export class GoogleMapsService {
   }
 
   /**
-   * Search for nearby places
+   * Search for nearby places via Places API (New) searchNearby
    */
   private async nearbySearch(
     location: Coordinates,
-    type: string,
+    types: string[],
     radius: number,
   ): Promise<PlaceResult[]> {
-    const allPlaces: PlaceResult[] = [];
-    let nextPageToken: string | null = null;
-    let pageCount = 0;
-    const maxPages = 1; // Limit to 1 page (20 results max per type)
-
-    do {
-      let url: string;
-      if (nextPageToken) {
-        // Wait a bit before requesting next page (Google requires this)
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        url = `${this.baseUrl}/place/nearbysearch/json?pagetoken=${encodeURIComponent(nextPageToken)}&key=${encodeURIComponent(this.apiKey)}`;
-      } else {
-        url = `${this.baseUrl}/place/nearbysearch/json?location=${location.lat},${location.lon}&radius=${radius}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(this.apiKey)}`;
-      }
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-        if (data.status === "INVALID_REQUEST" && nextPageToken) {
-          // Token might not be ready yet, break and return what we have
-          break;
-        }
-        throw new Error(`Nearby search failed: ${data.status}`);
-      }
-
-      if (data.results && data.results.length > 0) {
-        const places = data.results.map((place: any) => ({
-          id: place.place_id,
-          location: {
-            lat: place.geometry.location.lat,
-            lon: place.geometry.location.lng,
+    const response = await fetch(this.placesUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask": "places.id,places.location,places.displayName",
+      },
+      body: JSON.stringify({
+        includedTypes: types,
+        maxResultCount: 20, // API maximum, no pagination
+        locationRestriction: {
+          circle: {
+            center: { latitude: location.lat, longitude: location.lon },
+            radius,
           },
-          name: place.name || "Unknown",
-        }));
+        },
+      }),
+    });
+    const data = await response.json();
 
-        allPlaces.push(...places);
-        pageCount++;
-      }
+    if (!response.ok) {
+      throw new Error(
+        `Nearby search failed: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
 
-      nextPageToken = data.next_page_token || null;
-    } while (nextPageToken && pageCount < maxPages);
-
-    return allPlaces;
+    // An empty object is returned when nothing is found
+    return (data.places ?? []).map((place: any) => ({
+      id: place.id,
+      location: {
+        lat: place.location.latitude,
+        lon: place.location.longitude,
+      },
+      name: place.displayName?.text || "Unknown",
+    }));
   }
 
   /**

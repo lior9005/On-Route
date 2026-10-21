@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
@@ -9,6 +9,7 @@ import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
 import { Coordinates, CandidatePoint } from './src/models';
 import { CONFIG } from './src/constants/config';
+import { showAlert } from './src/utils/alert';
 
 function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
   useEffect(() => {
@@ -78,7 +79,7 @@ export default function App() {
       return;
     }
     if (!driverStart || !driverDestination || !passengerHome) {
-      Alert.alert('Missing Information', 'Please enter all three locations');
+      showAlert('Missing Information', 'Please enter all three locations');
       return;
     }
     setShowValidationErrors(false);

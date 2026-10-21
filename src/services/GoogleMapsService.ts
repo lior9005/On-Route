@@ -18,9 +18,26 @@ interface DetourRoute {
   leg2: RouteLeg;
 }
 
+type TravelMode = "DRIVE" | "WALK";
+
+interface RoutesApiLeg {
+  duration?: string; // e.g. "123s"
+  distanceMeters?: number;
+  polyline?: { encodedPolyline: string };
+}
+
+interface RoutesApiRoute {
+  duration?: string;
+  distanceMeters?: number;
+  polyline?: { encodedPolyline: string };
+  legs?: RoutesApiLeg[];
+}
+
 export class GoogleMapsService {
   private apiKey: string;
   private baseUrl = "https://maps.googleapis.com/maps/api";
+  private routesUrl =
+    "https://routes.googleapis.com/directions/v2:computeRoutes";
 
   constructor(apiKey: string) {
     // Application Security Requirement: API key passed as parameter (from environment), parameterized queries for all API calls
@@ -34,26 +51,19 @@ export class GoogleMapsService {
     start: Coordinates,
     end: Coordinates,
   ): Promise<BaselineRoute> {
-    const origin = `${start.lat},${start.lon}`;
-    const destination = `${end.lat},${end.lon}`;
-
-    // Use departure_time=now for real-time traffic data
-    const url = `${this.baseUrl}/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&departure_time=now&key=${encodeURIComponent(this.apiKey)}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.status !== "OK" || !data.routes || data.routes.length === 0) {
-      throw new Error(`Failed to fetch baseline route: ${data.status}`);
-    }
-
-    const route = data.routes[0];
-    const leg = route.legs[0];
+    const route = await this.computeRoute(
+      start,
+      end,
+      [],
+      "DRIVE",
+      "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+      "Failed to fetch baseline route",
+    );
 
     return {
-      polyline: route.overview_polyline.points,
-      duration: leg.duration.value,
-      distance: leg.distance.value,
+      polyline: route.polyline?.encodedPolyline ?? "",
+      duration: this.parseDuration(route.duration),
+      distance: route.distanceMeters ?? 0,
     };
   }
 
@@ -129,69 +139,47 @@ export class GoogleMapsService {
     end: Coordinates,
     passengerHome: Coordinates,
   ): Promise<any> {
-    // Fetch the detour route with polylines (with real-time traffic)
-    const detourUrl = `${this.baseUrl}/directions/json?origin=${start.lat},${start.lon}&destination=${end.lat},${end.lon}&waypoints=${candidate.coordinates.lat},${candidate.coordinates.lon}&departure_time=now&key=${encodeURIComponent(this.apiKey)}`;
+    // Fetch the detour route with per-leg polylines (with real-time traffic)
+    // and the walking route from meeting point to passenger home in parallel
+    const [detourRoute, walkingRoute] = await Promise.all([
+      this.computeRoute(
+        start,
+        end,
+        [candidate.coordinates],
+        "DRIVE",
+        "routes.legs.polyline.encodedPolyline",
+        "Failed to fetch route visualization",
+      ),
+      this.computeRoute(
+        candidate.coordinates,
+        passengerHome,
+        [],
+        "WALK",
+        "routes.polyline.encodedPolyline",
+        "Failed to fetch walking route",
+      ),
+    ]);
 
-    const detourResponse = await fetch(detourUrl);
-    const detourData = await detourResponse.json();
+    const legs = detourRoute.legs ?? [];
 
-    if (
-      detourData.status !== "OK" ||
-      !detourData.routes ||
-      detourData.routes.length === 0
-    ) {
-      throw new Error(
-        `Failed to fetch route visualization: ${detourData.status}`,
-      );
+    if (legs.length < 2) {
+      throw new Error("Expected 2 legs in detour route");
     }
 
-    const route = detourData.routes[0];
-    const legs = route.legs;
-
-    // Fetch walking route from meeting point to passenger home
-    const walkingUrl = `${this.baseUrl}/directions/json?origin=${candidate.coordinates.lat},${candidate.coordinates.lon}&destination=${passengerHome.lat},${passengerHome.lon}&mode=walking&key=${encodeURIComponent(this.apiKey)}`;
-
-    const walkingResponse = await fetch(walkingUrl);
-    const walkingData = await walkingResponse.json();
-
-    if (
-      walkingData.status !== "OK" ||
-      !walkingData.routes ||
-      walkingData.routes.length === 0
-    ) {
-      throw new Error(`Failed to fetch walking route: ${walkingData.status}`);
-    }
-
-    // Manually decode and re-encode leg polylines from steps
-    const leg1Points: Coordinates[] = [];
-    const leg2Points: Coordinates[] = [];
-
-    // Decode all steps in leg 1
-    for (const step of legs[0].steps) {
-      const stepPoints = this.decodePolyline(step.polyline.points);
-      leg1Points.push(...stepPoints);
-    }
-
-    // Decode all steps in leg 2
-    for (const step of legs[1].steps) {
-      const stepPoints = this.decodePolyline(step.polyline.points);
-      leg2Points.push(...stepPoints);
-    }
-
-    // Create segments with properly combined polylines
+    // Create segments from the per-leg polylines
     const segments = [
       {
-        polyline: this.encodePolyline(leg1Points),
+        polyline: legs[0].polyline?.encodedPolyline ?? "",
         color: "#4285F4", // Blue - driver to meeting point
         label: "Driver to Meeting Point",
       },
       {
-        polyline: this.encodePolyline(leg2Points),
+        polyline: legs[1].polyline?.encodedPolyline ?? "",
         color: "#34A853", // Green - meeting point to destination
         label: "Driver to Destination",
       },
       {
-        polyline: walkingData.routes[0].overview_polyline.points,
+        polyline: walkingRoute.polyline?.encodedPolyline ?? "",
         color: "#FBBC04", // Orange - passenger walking
         label: "Passenger Walking",
       },
@@ -225,21 +213,16 @@ export class GoogleMapsService {
     dropoff: Coordinates,
     end: Coordinates,
   ): Promise<DetourRoute> {
-    const origin = `${start.lat},${start.lon}`;
-    const waypoint = `${dropoff.lat},${dropoff.lon}`;
-    const destination = `${end.lat},${end.lon}`;
+    const route = await this.computeRoute(
+      start,
+      end,
+      [dropoff],
+      "DRIVE",
+      "routes.legs.duration,routes.legs.distanceMeters",
+      "Failed to compute detour route",
+    );
 
-    // Use departure_time=now for real-time traffic data
-    const url = `${this.baseUrl}/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoint)}&departure_time=now&key=${encodeURIComponent(this.apiKey)}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.status !== "OK" || !data.routes || data.routes.length === 0) {
-      throw new Error(`Failed to compute detour route: ${data.status}`);
-    }
-
-    const legs = data.routes[0].legs;
+    const legs = route.legs ?? [];
 
     if (legs.length < 2) {
       throw new Error("Expected 2 legs in detour route");
@@ -247,14 +230,76 @@ export class GoogleMapsService {
 
     return {
       leg1: {
-        duration: legs[0].duration.value,
-        distance: legs[0].distance.value,
+        duration: this.parseDuration(legs[0].duration),
+        distance: legs[0].distanceMeters ?? 0,
       },
       leg2: {
-        duration: legs[1].duration.value,
-        distance: legs[1].distance.value,
+        duration: this.parseDuration(legs[1].duration),
+        distance: legs[1].distanceMeters ?? 0,
       },
     };
+  }
+
+  /**
+   * Compute a single route via the Routes API (computeRoutes)
+   */
+  private async computeRoute(
+    origin: Coordinates,
+    destination: Coordinates,
+    intermediates: Coordinates[],
+    travelMode: TravelMode,
+    fieldMask: string,
+    errorMessage: string,
+  ): Promise<RoutesApiRoute> {
+    const toWaypoint = (c: Coordinates) => ({
+      location: { latLng: { latitude: c.lat, longitude: c.lon } },
+    });
+
+    const body: Record<string, unknown> = {
+      origin: toWaypoint(origin),
+      destination: toWaypoint(destination),
+      travelMode,
+    };
+
+    if (intermediates.length > 0) {
+      body.intermediates = intermediates.map(toWaypoint);
+    }
+
+    // TRAFFIC_AWARE uses real-time traffic (departure time defaults to now);
+    // routing preference is only allowed for driving
+    if (travelMode === "DRIVE") {
+      body.routingPreference = "TRAFFIC_AWARE";
+    }
+
+    const response = await fetch(this.routesUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask": fieldMask,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        `${errorMessage}: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
+
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error(`${errorMessage}: ZERO_RESULTS`);
+    }
+
+    return data.routes[0];
+  }
+
+  /**
+   * Parse a Routes API duration string (e.g. "123s") into seconds
+   */
+  private parseDuration(duration?: string): number {
+    return duration ? parseFloat(duration) : 0;
   }
 
   /**
@@ -353,44 +398,6 @@ export class GoogleMapsService {
     }
 
     return points;
-  }
-
-  /**
-   * Encode coordinates to Google polyline format
-   */
-  private encodePolyline(coordinates: Coordinates[]): string {
-    let encoded = "";
-    let prevLat = 0;
-    let prevLon = 0;
-
-    for (const coord of coordinates) {
-      const lat = Math.round(coord.lat * 1e5);
-      const lon = Math.round(coord.lon * 1e5);
-
-      encoded += this.encodeNumber(lat - prevLat);
-      encoded += this.encodeNumber(lon - prevLon);
-
-      prevLat = lat;
-      prevLon = lon;
-    }
-
-    return encoded;
-  }
-
-  /**
-   * Encode a single number for polyline
-   */
-  private encodeNumber(num: number): string {
-    let encoded = "";
-    let value = num < 0 ? ~(num << 1) : num << 1;
-
-    while (value >= 0x20) {
-      encoded += String.fromCharCode((0x20 | (value & 0x1f)) + 63);
-      value >>= 5;
-    }
-
-    encoded += String.fromCharCode(value + 63);
-    return encoded;
   }
 
   /**

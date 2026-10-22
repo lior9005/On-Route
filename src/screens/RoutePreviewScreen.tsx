@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Animated, Dimensions, Share, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Dimensions, Share, Platform } from 'react-native';
 import { CandidatePoint, Coordinates } from '../models';
 import { RouteMap } from '../components/RouteMap';
 import { meetingPointLabel } from '../components/CandidateList';
+import { RouteLoading } from '../components/RouteLoading';
 import { useRouteVisualization } from '../hooks/useRouteVisualization';
 import { WazeService } from '../services/WazeService';
 import { showAlert } from '../utils/alert';
@@ -133,10 +134,7 @@ export function RoutePreviewScreen({
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" style={styles.loader} />
-        <Text>Loading route preview...</Text>
-      </View>
+      <RouteLoading meetingPointName={meetingPointLabel(candidate)} />
     );
   }
 
@@ -332,9 +330,6 @@ export function RoutePreviewScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  loader: {
-    marginTop: 100,
   },
   error: {
     color: 'red',

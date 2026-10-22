@@ -68,7 +68,7 @@ export default function App() {
   const formScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   const { journey, saveJourney, advanceStage, clearJourney } = useJourneyState();
-  const { candidates, loading, error, runOptimization, clearCandidates } = useOptimization();
+  const { candidates, loading, error, searchSummary, runOptimization, clearCandidates } = useOptimization();
 
   const handleFindDropoff = async () => {
     const startEmpty = !driverStartText.trim();
@@ -691,6 +691,9 @@ export default function App() {
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle}>Select Drop/Pick Location</Text>
                 <Text style={styles.modalSubtitle}>{candidates.length} options found</Text>
+                {searchSummary && (
+                  <Text style={styles.searchSummary}>{searchSummary}</Text>
+                )}
               </View>
               <TouchableOpacity 
                 style={styles.closeButton}
@@ -898,6 +901,11 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 14,
     color: '#666',
+  },
+  searchSummary: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
   },
   closeButton: {
     width: 32,

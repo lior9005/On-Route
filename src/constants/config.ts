@@ -21,7 +21,7 @@ export const CONFIG = {
   ON_ROUTE_THRESHOLD_METERS: 25, // Point counts as on the driver's route within this distance
   MAX_SNAP_DISTANCE_METERS: 20, // Drop street points Google snaps further than this
   MAX_CANDIDATES_TO_EVALUATE: 15, // Candidates sent to Google APIs per search
-  OSM_TIMEOUT_MS: 5000,
+  OSM_TIMEOUT_MS: 10000, // Per Overpass server
   ROUTE_SAMPLE_INTERVAL_METERS: 10, // Precision when searching the driver's route for the closest spot
   DRIVE_TIME_TIE_SECONDS: 60, // Driving times this close count as equal; shorter walk wins
   GOOGLE_MAPS_API_TIMEOUT: 10000, // ms

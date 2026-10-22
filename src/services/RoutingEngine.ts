@@ -1,7 +1,7 @@
 import { GoogleMapsService } from "./GoogleMapsService";
 import { OsmService } from "./OsmService";
 import { IDropOffStrategy } from "../strategies/IDropOffStrategy";
-import { Coordinates, CandidatePoint, RawCandidate } from "../models";
+import { Coordinates, CandidatePoint, RawCandidate, SearchInfo } from "../models";
 import { CONFIG } from "../constants/config";
 import { haversineDistance } from "../utils/distance";
 import { decodePolyline } from "../utils/polylineDecoder";
@@ -12,6 +12,9 @@ import {
 } from "../utils/streetCandidates";
 
 export class RoutingEngine {
+  /** Details of the most recent optimize() call */
+  lastSearchInfo: SearchInfo | null = null;
+
   constructor(
     private googleMapsService: GoogleMapsService,
     private osmService: OsmService,
@@ -47,7 +50,9 @@ export class RoutingEngine {
       stopsResult.status === "rejected" &&
       streetsResult.status === "rejected"
     ) {
-      throw stopsResult.reason;
+      throw new Error(
+        `${errorText(stopsResult.reason)}; ${errorText(streetsResult.reason)}`,
+      );
     }
     if (stopsResult.status === "rejected") {
       console.warn("Transit stop search failed:", stopsResult.reason);
@@ -108,6 +113,20 @@ export class RoutingEngine {
       CONFIG.MAX_CANDIDATES_TO_EVALUATE,
     );
 
+    const info: SearchInfo = {
+      busStops: stopCandidates.length,
+      busStopError:
+        stopsResult.status === "rejected" ? errorText(stopsResult.reason) : undefined,
+      streetPoints: streetCandidates.length,
+      streetError:
+        streetsResult.status === "rejected" ? errorText(streetsResult.reason) : undefined,
+      evaluated: preselected.length,
+      tooFarToWalk: 0,
+      movedToOtherRoad: 0,
+      routeErrors: 0,
+    };
+    this.lastSearchInfo = info;
+
     if (preselected.length === 0) {
       return [];
     }
@@ -125,6 +144,7 @@ export class RoutingEngine {
       preselected.map(async (rawCandidate, i) => {
         const passengerLeg = passengerLegs[i];
         if (!passengerLeg) {
+          info.tooFarToWalk++;
           return null;
         }
 
@@ -142,6 +162,7 @@ export class RoutingEngine {
           haversineDistance(detourRoute.snappedDropoff, rawCandidate.location) >
             CONFIG.MAX_SNAP_DISTANCE_METERS
         ) {
+          info.movedToOtherRoad++;
           return null;
         }
 
@@ -168,6 +189,8 @@ export class RoutingEngine {
     );
 
     // Step 6: Keep successful, valid candidates
+    info.routeErrors = detourResults.filter((r) => r.status === "rejected").length;
+
     const validCandidates = detourResults
       .map((r) => (r.status === "fulfilled" ? r.value : null))
       .filter((c): c is CandidatePoint => c !== null);
@@ -229,4 +252,36 @@ export function rankCandidates(
   }
 
   return ranked;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function errorText(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/**
+ * One-line summary of a search, e.g. "Checked 4 bus stops and 38 street points"
+ */
+export function describeSearch(info: SearchInfo): string {
+  const parts = [
+    info.busStopError
+      ? `Bus stop search failed (${info.busStopError})`
+      : plural(info.busStops, "bus stop"),
+    info.streetError
+      ? `street search failed (${info.streetError})`
+      : plural(info.streetPoints, "street point"),
+  ];
+  const dropped = [
+    info.tooFarToWalk && `${info.tooFarToWalk} too far to walk`,
+    info.movedToOtherRoad && `${info.movedToOtherRoad} on another road`,
+    info.routeErrors && `${info.routeErrors} route errors`,
+  ].filter(Boolean);
+
+  return (
+    `Found ${parts.join(", ")}; compared the best ${info.evaluated}` +
+    (dropped.length ? ` (${dropped.join(", ")})` : "")
+  );
 }

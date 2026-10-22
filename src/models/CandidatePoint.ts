@@ -25,6 +25,18 @@ export interface RawCandidate {
   isClosestOnRoute?: boolean; // Spot on the driver's route closest to the passenger
 }
 
+/** What a search looked at, shown under the results to explain them */
+export interface SearchInfo {
+  busStops: number;
+  busStopError?: string;
+  streetPoints: number;
+  streetError?: string;
+  evaluated: number; // Candidates sent to Google after pre-filtering
+  tooFarToWalk: number;
+  movedToOtherRoad: number;
+  routeErrors: number;
+}
+
 export interface CandidatePoint {
   id: string;
   coordinates: Coordinates;

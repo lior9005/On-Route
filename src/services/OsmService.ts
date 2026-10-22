@@ -21,7 +21,11 @@ export interface StreetNetwork {
  * Google APIs do not expose road types, so OSM tells small streets from big roads.
  */
 export class OsmService {
-  private overpassUrl = "https://overpass-api.de/api/interpreter";
+  // Public Overpass servers, tried in order
+  private overpassUrls = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+  ];
 
   /**
    * Fetch small streets and big roads around a location
@@ -41,50 +45,67 @@ export class OsmService {
       way(${around(bigRadius)})["highway"~"^(${big})$"];
     );out body geom;`;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      CONFIG.OSM_TIMEOUT_MS,
-    );
+    const data = await this.queryOverpass(query);
+    const smallTypes = new Set<string>(CONFIG.SMALL_STREET_TYPES);
+    const network: StreetNetwork = { smallStreets: [], bigRoads: [] };
 
-    try {
-      // Form-encoded POST is a "simple" CORS request (no preflight)
-      const response = await fetch(this.overpassUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: controller.signal,
-      });
+    for (const el of data.elements ?? []) {
+      if (el.type !== "way" || !el.geometry || !el.tags?.highway) continue;
 
-      if (!response.ok) {
-        throw new Error(`Overpass request failed: ${response.status}`);
+      const way: OsmWay = {
+        id: el.id,
+        name: el.tags["name:en"] || el.tags.name,
+        highway: el.tags.highway,
+        nodeIds: el.nodes ?? [],
+        geometry: el.geometry.map((g: any) => ({ lat: g.lat, lon: g.lon })),
+      };
+
+      if (smallTypes.has(way.highway)) {
+        network.smallStreets.push(way);
+      } else {
+        network.bigRoads.push(way);
       }
-
-      const data = await response.json();
-      const smallTypes = new Set<string>(CONFIG.SMALL_STREET_TYPES);
-      const network: StreetNetwork = { smallStreets: [], bigRoads: [] };
-
-      for (const el of data.elements ?? []) {
-        if (el.type !== "way" || !el.geometry || !el.tags?.highway) continue;
-
-        const way: OsmWay = {
-          id: el.id,
-          name: el.tags["name:en"] || el.tags.name,
-          highway: el.tags.highway,
-          nodeIds: el.nodes ?? [],
-          geometry: el.geometry.map((g: any) => ({ lat: g.lat, lon: g.lon })),
-        };
-
-        if (smallTypes.has(way.highway)) {
-          network.smallStreets.push(way);
-        } else {
-          network.bigRoads.push(way);
-        }
-      }
-
-      return network;
-    } finally {
-      clearTimeout(timeout);
     }
+
+    return network;
+  }
+
+  /**
+   * Run an Overpass query, falling back to the next server on failure
+   */
+  private async queryOverpass(query: string): Promise<any> {
+    const errors: string[] = [];
+
+    for (const url of this.overpassUrls) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), CONFIG.OSM_TIMEOUT_MS);
+
+      try {
+        // Form-encoded POST is a "simple" CORS request (no preflight)
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.json();
+      } catch (err) {
+        const reason =
+          err instanceof Error && err.name === "AbortError"
+            ? "timed out"
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        errors.push(`${new URL(url).hostname}: ${reason}`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    throw new Error(`OpenStreetMap unavailable (${errors.join("; ")})`);
   }
 }

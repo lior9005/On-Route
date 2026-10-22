@@ -16,20 +16,23 @@ export function buildStreetCandidates(
 ): RawCandidate[] {
   const points: Array<{ location: Coordinates; name: string; isIntersection: boolean }> = [];
 
-  // Corners: nodes shared by two or more different small streets
-  const nodeStreets = new Map<number, { location: Coordinates; names: Set<string>; wayIds: Set<number> }>();
+  // Corners: points where 3+ distinct street directions meet. Counting unique
+  // neighbouring vertices ignores a street split into several pieces (or
+  // repeated in two map tiles), which would otherwise look like a corner.
+  const nodes = new Map<number, { location: Coordinates; names: Set<string>; neighbours: Set<number> }>();
   for (const way of network.smallStreets) {
     way.nodeIds.forEach((nodeId, i) => {
       const location = way.geometry[i];
       if (!location) return;
-      const entry = nodeStreets.get(nodeId) ?? { location, names: new Set(), wayIds: new Set() };
-      entry.wayIds.add(way.id);
+      const entry = nodes.get(nodeId) ?? { location, names: new Set(), neighbours: new Set() };
+      if (i > 0) entry.neighbours.add(way.nodeIds[i - 1]);
+      if (i < way.nodeIds.length - 1) entry.neighbours.add(way.nodeIds[i + 1]);
       if (way.name) entry.names.add(way.name);
-      nodeStreets.set(nodeId, entry);
+      nodes.set(nodeId, entry);
     });
   }
-  for (const entry of nodeStreets.values()) {
-    if (entry.wayIds.size < 2) continue;
+  for (const entry of nodes.values()) {
+    if (entry.neighbours.size < 3) continue;
     const names = [...entry.names];
     points.push({
       location: entry.location,

@@ -20,7 +20,7 @@ Enable these APIs for the key in Google Cloud Console:
 | Maps SDK for Android | Route map on Android |
 | Geocoding API | Address for "use my current location" |
 
-Street meeting points use the free OpenStreetMap Overpass API (no key) to find small streets (`residential`, `living_street`, `unclassified`) and keep away from big roads. The app calls it through the Netlify function `netlify/functions/streets.mts` (browsers cannot call the public Overpass servers reliably; responses are cached on Netlify's CDN), falling back to the public servers directly. Native builds use `https://on-route.netlify.app/.netlify/functions/streets` unless `EXPO_PUBLIC_STREETS_API_URL` is set. If no street data is available, only transit stops are suggested.
+Street meeting points use free OpenStreetMap data from [OpenFreeMap](https://openfreemap.org) vector tiles (no key; CDN with CORS, so browsers call it directly) to find small streets (road class `minor`: residential, living_street, unclassified) and keep away from big roads (`tertiary` and above). If it is unavailable, only transit stops are suggested.
 
 `EXPO_PUBLIC_*` values are embedded in the app bundle, so the key is visible to users. Protect it with API restrictions (only the APIs above) and application restrictions (HTTP referrers for web, package name + SHA-1 for Android).
 

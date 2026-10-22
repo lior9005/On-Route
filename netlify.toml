@@ -4,10 +4,6 @@
   command = "npx expo export --platform web --clear"
   publish = "dist"
 
-[functions]
-  # streets.mts: OpenStreetMap proxy used by the app's street search
-  directory = "netlify/functions"
-
 [build.environment]
   NODE_VERSION = "20"
 

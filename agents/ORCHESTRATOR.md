@@ -1,3 +1,5 @@
+> **Historical, out of date.** This is the original build plan; the app has changed since (Routes/Places APIs (New), web support, street meeting points). See `AGENTS.md` in the repo root and the code instead.
+
 # Multi-Agent Orchestrator
 ## On-Route: Multi-Modal Drop-off Optimizer
 

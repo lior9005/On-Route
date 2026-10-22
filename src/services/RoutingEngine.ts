@@ -101,11 +101,13 @@ export class RoutingEngine {
       );
     }
 
-    // Step 3: Pre-filter without API calls - within walking range (straight
-    // line), merged, best estimated detours first, capped for cost
+    // Step 3: Pre-filter without API calls - likely within walking range
+    // (straight line, with room for the real path being longer), merged,
+    // best estimated detours first, capped for cost
+    const maxStraightLine = maxConstraint * CONFIG.WALK_PREFILTER_RATIO;
     const preselected = preselectCandidates(
       [...stopCandidates, ...streetCandidates].filter(
-        (c) => haversineDistance(c.location, passengerHome) <= maxConstraint,
+        (c) => haversineDistance(c.location, passengerHome) <= maxStraightLine,
       ),
       start,
       end,

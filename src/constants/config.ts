@@ -18,6 +18,9 @@ export const CONFIG = {
   ON_ROUTE_THRESHOLD_METERS: 25, // Point counts as on the driver's route within this distance
   MAX_SNAP_DISTANCE_METERS: 20, // Drop street points Google snaps further than this
   MAX_CANDIDATES_TO_EVALUATE: 15, // Candidates sent to Google APIs per search
+  // Real walking routes run ~30% longer than a straight line: only shortlist
+  // points within this share of the walking limit (straight line)
+  WALK_PREFILTER_RATIO: 0.75,
   OSM_TIMEOUT_MS: 8000, // Each OpenFreeMap request
   ROUTE_SAMPLE_INTERVAL_METERS: 10, // Precision when searching the driver's route for the closest spot
   DRIVE_TIME_TIE_SECONDS: 60, // Driving times this close count as equal; shorter walk wins

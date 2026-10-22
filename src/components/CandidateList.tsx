@@ -22,17 +22,28 @@ export function meetingPointLabel(candidate: CandidatePoint): string {
 function CandidateItem({
   item,
   isSelected,
+  isShortestWalk,
   onSelect,
 }: {
   item: CandidatePoint;
   isSelected: boolean;
+  isShortestWalk: boolean;
   onSelect: () => void;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.item, isSelected && styles.selectedItem]}
+      style={[
+        styles.item,
+        isShortestWalk && styles.shortestWalkItem,
+        isSelected && styles.selectedItem,
+      ]}
       onPress={onSelect}
     >
+      {isShortestWalk && (
+        <View style={styles.shortestWalkBadge}>
+          <Text style={styles.shortestWalkBadgeText}>🚶 Shortest walk</Text>
+        </View>
+      )}
       <Text style={styles.name}>{meetingPointLabel(item)}</Text>
       {item.extraDriveTime !== undefined && (
         <Text style={styles.extraTime}>
@@ -74,6 +85,14 @@ export function CandidateList({ candidates, selectedId, onSelect }: CandidateLis
     );
   }
 
+  // Highlight the option where the passenger walks the least (only when there is a choice)
+  const shortestWalkId =
+    candidates.length > 1
+      ? candidates.reduce((best, c) =>
+          c.passengerLeg.duration < best.passengerLeg.duration ? c : best,
+        ).id
+      : undefined;
+
   return (
     <ScrollView
       style={styles.list}
@@ -86,6 +105,7 @@ export function CandidateList({ candidates, selectedId, onSelect }: CandidateLis
           key={item.id}
           item={item}
           isSelected={item.id === selectedId}
+          isShortestWalk={item.id === shortestWalkId}
           onSelect={() => onSelect(item)}
         />
       ))}
@@ -107,6 +127,24 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     backgroundColor: '#fff',
     minHeight: 150,
+  },
+  shortestWalkItem: {
+    backgroundColor: '#E8F5E9',
+    borderLeftWidth: 4,
+    borderLeftColor: '#43A047',
+  },
+  shortestWalkBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#43A047',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 8,
+  },
+  shortestWalkBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   selectedItem: {
     backgroundColor: '#e3f2fd',

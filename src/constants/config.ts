@@ -27,6 +27,9 @@ export const CONFIG = {
   GOOGLE_MAPS_API_TIMEOUT: 10000, // ms
   GOOGLE_MAPS_API_KEY, // From environment variables
 
+  // Route preview loading screen stays at least this long, so it doesn't flash
+  ROUTE_PREVIEW_MIN_LOADING_MS: 2400,
+
   // Route Preview Map Styling
   MAP_PADDING: 0.1, // 10% padding for map bounds
   ROUTE_COLORS: {

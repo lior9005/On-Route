@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
 import { CandidateList } from './src/components/CandidateList';
+import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
 import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
@@ -652,7 +653,7 @@ export default function App() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <SearchingIndicator />
               ) : (
                 <View style={styles.formButtonContent}>
                   <Text style={styles.formButtonIcon}>🔍</Text>
@@ -808,7 +809,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   formButtonDisabled: {
-    backgroundColor: '#90CAF9',
+    backgroundColor: '#1976D2', // Searching: darker, keeps the animation readable
   },
   formButtonContent: {
     flexDirection: 'row',

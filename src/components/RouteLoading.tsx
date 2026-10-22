@@ -6,7 +6,7 @@ const STEPS = [
   '🚶 Mapping the walk for your passenger…',
   '🗺️ Drawing the map…',
 ];
-const STEP_INTERVAL_MS = 1600;
+const STEP_INTERVAL_MS = 800; // All steps show within the minimum loading time
 const CAR_SIZE = 36;
 
 interface RouteLoadingProps {

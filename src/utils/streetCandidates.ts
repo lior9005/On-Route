@@ -65,6 +65,50 @@ export function buildStreetCandidates(
 }
 
 /**
+ * The spot on the driver's route closest to the passenger that is on a small
+ * street and at least BIG_ROAD_BUFFER_METERS from big roads, so the driver
+ * stops on the way instead of the passenger walking to a point further along.
+ * Null if the route never passes such a spot within walking distance.
+ */
+export function closestRouteCandidate(
+  network: StreetNetwork,
+  passengerHome: Coordinates,
+  maxWalkingMeters: number,
+  driverRoute: Coordinates[],
+): RawCandidate | null {
+  let best: { location: Coordinates; name?: string; distance: number } | null = null;
+
+  for (const location of samplePolyline(driverRoute, CONFIG.ROUTE_SAMPLE_INTERVAL_METERS)) {
+    const distance = haversineDistance(location, passengerHome);
+    if (distance > maxWalkingMeters || (best && distance >= best.distance)) continue;
+
+    // Must be on a small street (route polyline is approximate, allow some slack)
+    const street = network.smallStreets.find(
+      (way) => distanceToPolyline(location, way.geometry) <= CONFIG.ON_ROUTE_THRESHOLD_METERS,
+    );
+    if (!street) continue;
+
+    const nearBigRoad = network.bigRoads.some(
+      (road) => distanceToPolyline(location, road.geometry) < CONFIG.BIG_ROAD_BUFFER_METERS,
+    );
+    if (nearBigRoad) continue;
+
+    best = { location, name: street.name, distance };
+  }
+
+  if (!best) return null;
+
+  return {
+    id: `route:${best.location.lat.toFixed(5)},${best.location.lon.toFixed(5)}`,
+    location: best.location,
+    name: best.name ?? "Side street",
+    kind: "STREET",
+    onDriverRoute: true,
+    isClosestOnRoute: true,
+  };
+}
+
+/**
  * Cheap straight-line estimate of the driver's extra distance via a point (meters)
  */
 export function estimateDetour(start: Coordinates, point: Coordinates, end: Coordinates): number {
@@ -88,6 +132,7 @@ export function preselectCandidates(
   limit: number,
 ): RawCandidate[] {
   const score = (c: RawCandidate) =>
+    (c.isClosestOnRoute ? -Infinity : 0) +
     estimateDetour(start, c.location, end) -
     (c.onDriverRoute ? 1000 : 0) -
     (c.isIntersection ? 20 : 0);

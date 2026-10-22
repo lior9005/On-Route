@@ -22,6 +22,7 @@ export interface RawCandidate {
   kind: MeetingPointKind;
   onDriverRoute?: boolean; // Street point on the driver's normal route
   isIntersection?: boolean; // Corner of two small streets
+  isClosestOnRoute?: boolean; // Spot on the driver's route closest to the passenger
 }
 
 export interface CandidatePoint {

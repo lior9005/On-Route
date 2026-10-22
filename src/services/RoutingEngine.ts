@@ -7,6 +7,7 @@ import { haversineDistance } from "../utils/distance";
 import { decodePolyline } from "../utils/polylineDecoder";
 import {
   buildStreetCandidates,
+  closestRouteCandidate,
   preselectCandidates,
 } from "../utils/streetCandidates";
 
@@ -75,15 +76,25 @@ export class RoutingEngine {
           }))
         : [];
 
-    const streetCandidates: RawCandidate[] =
-      streetsResult.status === "fulfilled"
-        ? buildStreetCandidates(
-            streetsResult.value,
-            passengerHome,
-            maxConstraint,
-            driverRoute,
-          )
-        : [];
+    const streetCandidates: RawCandidate[] = [];
+    if (streetsResult.status === "fulfilled") {
+      const network = streetsResult.value;
+      const closest = closestRouteCandidate(
+        network,
+        passengerHome,
+        maxConstraint,
+        driverRoute,
+      );
+      if (closest) streetCandidates.push(closest);
+      streetCandidates.push(
+        ...buildStreetCandidates(
+          network,
+          passengerHome,
+          maxConstraint,
+          driverRoute,
+        ),
+      );
+    }
 
     // Step 3: Pre-filter without API calls - within walking range (straight
     // line), merged, best estimated detours first, capped for cost
@@ -168,13 +179,14 @@ export class RoutingEngine {
       }
     }
 
-    // Step 7: Sort by total detour time (shortest first)
-    validCandidates.sort((a, b) => a.totalDetour - b.totalDetour);
+    // Step 7: Rank by driving time; near-equal driving times (within
+    // DRIVE_TIME_TIE_SECONDS) are decided by the shorter passenger walk
+    const ranked = rankCandidates(validCandidates, CONFIG.DRIVE_TIME_TIE_SECONDS);
 
     // Step 8: Merge candidates within CANDIDATE_MERGE_RADIUS_METERS; keep best per cluster
     const merged: CandidatePoint[] = [];
     const mergeRadius = CONFIG.CANDIDATE_MERGE_RADIUS_METERS;
-    for (const c of validCandidates) {
+    for (const c of ranked) {
       const tooClose = merged.some(
         (m) => haversineDistance(c.coordinates, m.coordinates) < mergeRadius,
       );
@@ -184,4 +196,37 @@ export class RoutingEngine {
     // Step 9: Return top N candidates
     return merged.slice(0, CONFIG.TOP_CANDIDATES_COUNT);
   }
+}
+
+/**
+ * Order candidates best first: repeatedly take, among the candidates whose
+ * driving time is within `tieSeconds` of the fastest remaining one, the one
+ * with the shortest passenger leg.
+ */
+export function rankCandidates(
+  candidates: CandidatePoint[],
+  tieSeconds: number,
+): CandidatePoint[] {
+  const remaining = [...candidates];
+  const ranked: CandidatePoint[] = [];
+
+  while (remaining.length > 0) {
+    const fastest = Math.min(...remaining.map((c) => c.totalDetour));
+    let bestIndex = -1;
+    remaining.forEach((c, i) => {
+      if (c.totalDetour > fastest + tieSeconds) return;
+      const best = bestIndex >= 0 ? remaining[bestIndex] : null;
+      if (
+        !best ||
+        c.passengerLeg.duration < best.passengerLeg.duration ||
+        (c.passengerLeg.duration === best.passengerLeg.duration &&
+          c.totalDetour < best.totalDetour)
+      ) {
+        bestIndex = i;
+      }
+    });
+    ranked.push(remaining.splice(bestIndex, 1)[0]);
+  }
+
+  return ranked;
 }

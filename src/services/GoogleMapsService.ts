@@ -16,6 +16,8 @@ interface BaselineRoute {
 interface DetourRoute {
   leg1: RouteLeg;
   leg2: RouteLeg;
+  /** Where Google placed the stop on the road (may differ from the requested point) */
+  snappedDropoff?: Coordinates;
 }
 
 type TravelMode = "DRIVE" | "WALK";
@@ -24,6 +26,7 @@ interface RoutesApiLeg {
   duration?: string; // e.g. "123s"
   distanceMeters?: number;
   polyline?: { encodedPolyline: string };
+  endLocation?: { latLng?: { latitude: number; longitude: number } };
 }
 
 interface RoutesApiRoute {
@@ -37,6 +40,8 @@ export class GoogleMapsService {
   private apiKey: string;
   private routesUrl =
     "https://routes.googleapis.com/directions/v2:computeRoutes";
+  private routeMatrixUrl =
+    "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
   private placesUrl = "https://places.googleapis.com/v1/places:searchNearby";
 
   constructor(apiKey: string) {
@@ -227,7 +232,7 @@ export class GoogleMapsService {
       end,
       [dropoff],
       "DRIVE",
-      "routes.legs.duration,routes.legs.distanceMeters",
+      "routes.legs.duration,routes.legs.distanceMeters,routes.legs.endLocation",
       "Failed to compute detour route",
     );
 
@@ -236,6 +241,8 @@ export class GoogleMapsService {
     if (legs.length < 2) {
       throw new Error("Expected 2 legs in detour route");
     }
+
+    const snapped = legs[0].endLocation?.latLng;
 
     return {
       leg1: {
@@ -246,7 +253,58 @@ export class GoogleMapsService {
         duration: this.parseDuration(legs[1].duration),
         distance: legs[1].distanceMeters ?? 0,
       },
+      snappedDropoff: snapped
+        ? { lat: snapped.latitude, lon: snapped.longitude }
+        : undefined,
     };
+  }
+
+  /**
+   * Real walking distance/time from each origin to one destination,
+   * in a single Route Matrix request. Null where no walking route exists.
+   */
+  async computeWalkingLegs(
+    origins: Coordinates[],
+    destination: Coordinates,
+  ): Promise<(RouteLeg | null)[]> {
+    if (origins.length === 0) return [];
+
+    const toWaypoint = (c: Coordinates) => ({
+      waypoint: { location: { latLng: { latitude: c.lat, longitude: c.lon } } },
+    });
+
+    const response = await fetch(this.routeMatrixUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask":
+          "originIndex,destinationIndex,duration,distanceMeters,condition",
+      },
+      body: JSON.stringify({
+        origins: origins.map(toWaypoint),
+        destinations: [toWaypoint(destination)],
+        travelMode: "WALK",
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !Array.isArray(data)) {
+      throw new Error(
+        `Failed to compute walking distances: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
+
+    const legs: (RouteLeg | null)[] = origins.map(() => null);
+    for (const element of data) {
+      if (element.condition !== "ROUTE_EXISTS") continue;
+      // Zero values (e.g. originIndex 0) are omitted from the JSON
+      legs[element.originIndex ?? 0] = {
+        duration: this.parseDuration(element.duration),
+        distance: element.distanceMeters ?? 0,
+      };
+    }
+    return legs;
   }
 
   /**

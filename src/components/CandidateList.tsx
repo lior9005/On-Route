@@ -9,6 +9,16 @@ interface CandidateListProps {
   onSelect: (candidate: CandidatePoint) => void;
 }
 
+/**
+ * Display name with an icon for the meeting point type
+ */
+export function meetingPointLabel(candidate: CandidatePoint): string {
+  if (candidate.kind === 'STREET') {
+    return `🏘️ ${candidate.name || 'Side street'}`;
+  }
+  return `🚏 ${candidate.name || 'Transit Station'}`;
+}
+
 function CandidateItem({
   item,
   isSelected,
@@ -23,7 +33,12 @@ function CandidateItem({
       style={[styles.item, isSelected && styles.selectedItem]}
       onPress={onSelect}
     >
-      <Text style={styles.name}>{item.name || 'Transit Station'}</Text>
+      <Text style={styles.name}>{meetingPointLabel(item)}</Text>
+      {item.extraDriveTime !== undefined && (
+        <Text style={styles.extraTime}>
+          +{secondsToMinutes(item.extraDriveTime)} min vs. your normal route
+        </Text>
+      )}
       <View style={styles.routeInfo}>
         <Text style={styles.routeLabel}>🚗 Your Location → Drop/Pick Location</Text>
         <Text style={styles.routeValue}>
@@ -103,6 +118,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     color: '#2196F3',
+  },
+  extraTime: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: -8,
+    marginBottom: 12,
   },
   routeInfo: {
     marginBottom: 6,

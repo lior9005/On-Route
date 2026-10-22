@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { CandidatePoint, Coordinates } from "../models";
 import { GoogleMapsService } from "../services/GoogleMapsService";
+import { OsmService } from "../services/OsmService";
 import { RoutingEngine } from "../services/RoutingEngine";
 import { WalkingStrategy } from "../strategies/WalkingStrategy";
 import { CONFIG } from "../constants/config";
@@ -27,8 +28,12 @@ export function useOptimization() {
       const googleMapsService = new GoogleMapsService(
         CONFIG.GOOGLE_MAPS_API_KEY,
       );
-      const strategy = new WalkingStrategy();
-      const routingEngine = new RoutingEngine(googleMapsService, strategy);
+      const strategy = new WalkingStrategy(googleMapsService);
+      const routingEngine = new RoutingEngine(
+        googleMapsService,
+        new OsmService(),
+        strategy,
+      );
 
       // Run optimization
       const results = await routingEngine.optimize(

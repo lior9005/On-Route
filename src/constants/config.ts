@@ -8,6 +8,20 @@ export const CONFIG = {
   /** Merge meeting point candidates within this distance (meters); keep best per cluster */
   CANDIDATE_MERGE_RADIUS_METERS: 100,
   SAMPLE_INTERVAL: 5, // Sample every Nth point from polyline
+
+  // Street meeting points (OpenStreetMap road types)
+  SMALL_STREET_TYPES: ["residential", "living_street", "unclassified"],
+  BIG_ROAD_TYPES: [
+    "motorway", "motorway_link", "trunk", "trunk_link",
+    "primary", "primary_link", "secondary", "secondary_link",
+    "tertiary", "tertiary_link",
+  ],
+  STREET_SAMPLE_INTERVAL_METERS: 100, // One candidate point every 100m of street
+  BIG_ROAD_BUFFER_METERS: 30, // Skip street points this close to a big road
+  ON_ROUTE_THRESHOLD_METERS: 25, // Point counts as on the driver's route within this distance
+  MAX_SNAP_DISTANCE_METERS: 20, // Drop street points Google snaps further than this
+  MAX_CANDIDATES_TO_EVALUATE: 15, // Candidates sent to Google APIs per search
+  OSM_TIMEOUT_MS: 5000,
   GOOGLE_MAPS_API_TIMEOUT: 10000, // ms
   GOOGLE_MAPS_API_KEY, // From environment variables
 

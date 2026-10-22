@@ -12,6 +12,18 @@ export interface PassengerLeg extends RouteLeg {
   mode: "WALK" | "TRANSIT";
 }
 
+export type MeetingPointKind = "BUS_STOP" | "STREET";
+
+/** A possible meeting point before routes are computed */
+export interface RawCandidate {
+  id: string;
+  location: Coordinates;
+  name: string;
+  kind: MeetingPointKind;
+  onDriverRoute?: boolean; // Street point on the driver's normal route
+  isIntersection?: boolean; // Corner of two small streets
+}
+
 export interface CandidatePoint {
   id: string;
   coordinates: Coordinates;
@@ -21,4 +33,6 @@ export interface CandidatePoint {
   totalDetour: number; // leg1.duration + leg2.duration
   placeId?: string; // Google Place ID
   name?: string; // e.g., "Main St & 5th Ave"
+  kind?: MeetingPointKind;
+  extraDriveTime?: number; // seconds added vs. the driver's normal route
 }

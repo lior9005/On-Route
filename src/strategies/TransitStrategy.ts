@@ -7,12 +7,12 @@ import { Coordinates, PassengerLeg } from '../models';
  */
 export class TransitStrategy implements IDropOffStrategy {
   async validate(
-    dropoffPoint: Coordinates,
+    dropoffPoints: Coordinates[],
     passengerHome: Coordinates,
     maxTransitMinutes: number
-  ): Promise<PassengerLeg | null> {
+  ): Promise<(PassengerLeg | null)[]> {
     // TODO: Implement using Google Routes API
-    // 1. Call computeRoutes from dropoffPoint → passengerHome with travelMode=TRANSIT
+    // 1. Call computeRoutes from each dropoff point → passengerHome with travelMode=TRANSIT
     // 2. Parse routes[0].legs[0].duration (e.g. "123s")
     // 3. Check if duration <= maxTransitMinutes
     // 4. Return PassengerLeg with mode: 'TRANSIT' and actual duration

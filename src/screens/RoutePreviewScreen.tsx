@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Animated, Dimensions, Share, Platform } from 'react-native';
 import { CandidatePoint, Coordinates } from '../models';
 import { RouteMap } from '../components/RouteMap';
+import { meetingPointLabel } from '../components/CandidateList';
 import { useRouteVisualization } from '../hooks/useRouteVisualization';
 import { WazeService } from '../services/WazeService';
 import { showAlert } from '../utils/alert';
@@ -285,7 +286,7 @@ export function RoutePreviewScreen({
           </TouchableOpacity>
         </View>
         <Text style={styles.dropoffName}>
-          Drop/Pick Location: {candidate.name || 'Transit Station'}
+          Drop/Pick Location: {meetingPointLabel(candidate)}
         </Text>
         
         <View style={styles.routeSegment}>

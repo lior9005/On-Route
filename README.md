@@ -14,11 +14,13 @@ Enable these APIs for the key in Google Cloud Console:
 
 | API | Used for |
 | --- | --- |
-| Routes API | Driving and walking routes (`GoogleMapsService`) |
+| Routes API | Driving and walking routes, walking distance matrix (`GoogleMapsService`) |
 | Places API (New) | Address autocomplete and nearby transit stops |
 | Maps JavaScript API | Route map on web |
 | Maps SDK for Android | Route map on Android |
 | Geocoding API | Address for "use my current location" |
+
+Street meeting points use the free OpenStreetMap Overpass API (`overpass-api.de`, no key) to find small streets (`residential`, `living_street`, `unclassified`) and keep away from big roads. If it is unavailable, only transit stops are suggested.
 
 `EXPO_PUBLIC_*` values are embedded in the app bundle, so the key is visible to users. Protect it with API restrictions (only the APIs above) and application restrictions (HTTP referrers for web, package name + SHA-1 for Android).
 

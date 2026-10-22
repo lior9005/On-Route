@@ -1,5 +1,7 @@
 import { Coordinates } from "../models";
+import { Platform } from "react-native";
 import { CONFIG } from "../constants/config";
+import { buildStreetQuery, OVERPASS_SERVERS } from "../utils/overpassQuery";
 
 export interface OsmWay {
   id: number;
@@ -17,15 +19,18 @@ export interface StreetNetwork {
 }
 
 /**
- * OpenStreetMap street data via the public Overpass API.
+ * OpenStreetMap street data via the Overpass API.
  * Google APIs do not expose road types, so OSM tells small streets from big roads.
+ *
+ * Goes through the site's Netlify function first (browsers cannot reliably
+ * call the public Overpass servers), then the public servers directly.
  */
 export class OsmService {
-  // Public Overpass servers, tried in order
-  private overpassUrls = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-  ];
+  private proxyUrl =
+    process.env.EXPO_PUBLIC_STREETS_API_URL ||
+    (Platform.OS === "web"
+      ? "/.netlify/functions/streets"
+      : "https://on-route.netlify.app/.netlify/functions/streets");
 
   /**
    * Fetch small streets and big roads around a location
@@ -34,18 +39,7 @@ export class OsmService {
     center: Coordinates,
     radius: number,
   ): Promise<StreetNetwork> {
-    const small = CONFIG.SMALL_STREET_TYPES.join("|");
-    const big = CONFIG.BIG_ROAD_TYPES.join("|");
-    // Big roads are searched a bit wider so points near the edge are still checked
-    const bigRadius = Math.round(radius + CONFIG.BIG_ROAD_BUFFER_METERS);
-    const around = (r: number) => `around:${Math.round(r)},${center.lat},${center.lon}`;
-
-    const query = `[out:json][timeout:10];(
-      way(${around(radius)})["highway"~"^(${small})$"];
-      way(${around(bigRadius)})["highway"~"^(${big})$"];
-    );out body geom;`;
-
-    const data = await this.queryOverpass(query);
+    const data = await this.fetchOverpassData(center, Math.round(radius));
     const smallTypes = new Set<string>(CONFIG.SMALL_STREET_TYPES);
     const network: StreetNetwork = { smallStreets: [], bigRoads: [] };
 
@@ -71,41 +65,62 @@ export class OsmService {
   }
 
   /**
-   * Run an Overpass query, falling back to the next server on failure
+   * Overpass JSON from the proxy function, falling back to public servers
    */
-  private async queryOverpass(query: string): Promise<any> {
+  private async fetchOverpassData(center: Coordinates, radius: number): Promise<any> {
     const errors: string[] = [];
 
-    for (const url of this.overpassUrls) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), CONFIG.OSM_TIMEOUT_MS);
+    // ~10m precision keeps nearby searches on the same cached response
+    const lat = center.lat.toFixed(4);
+    const lon = center.lon.toFixed(4);
+    try {
+      return await this.fetchJson(
+        `${this.proxyUrl}?lat=${lat}&lon=${lon}&radius=${radius}`,
+        { method: "GET" },
+        CONFIG.OSM_TIMEOUT_MS,
+      );
+    } catch (err) {
+      errors.push(`proxy: ${this.reason(err)}`);
+    }
 
+    const query = buildStreetQuery({ lat: Number(lat), lon: Number(lon) }, radius);
+    for (const url of OVERPASS_SERVERS.slice(0, 2)) {
       try {
         // Form-encoded POST is a "simple" CORS request (no preflight)
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `data=${encodeURIComponent(query)}`,
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return await response.json();
+        return await this.fetchJson(
+          url,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `data=${encodeURIComponent(query)}`,
+          },
+          CONFIG.OSM_DIRECT_TIMEOUT_MS,
+        );
       } catch (err) {
-        const reason =
-          err instanceof Error && err.name === "AbortError"
-            ? "timed out"
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        errors.push(`${new URL(url).hostname}: ${reason}`);
-      } finally {
-        clearTimeout(timeout);
+        errors.push(`${new URL(url).hostname}: ${this.reason(err)}`);
       }
     }
 
     throw new Error(`OpenStreetMap unavailable (${errors.join("; ")})`);
+  }
+
+  private async fetchJson(url: string, init: RequestInit, timeoutMs: number): Promise<any> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? `HTTP ${response.status}`);
+      }
+      return data;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private reason(err: unknown): string {
+    if (err instanceof Error && err.name === "AbortError") return "timed out";
+    return err instanceof Error ? err.message : String(err);
   }
 }

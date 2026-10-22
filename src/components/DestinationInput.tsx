@@ -6,6 +6,7 @@ import type { LocationGeocodedAddress } from 'expo-location';
 import { Coordinates } from '../models';
 import { CONFIG } from '../constants/config';
 import { showAlert } from '../utils/alert';
+import { GoogleMapsService } from '../services/GoogleMapsService';
 
 // Places API (New) supports CORS, so the same endpoint works on native and web
 const PLACES_REQUEST_URL = {
@@ -28,6 +29,31 @@ function formatGeocodedAddress(addr: LocationGeocodedAddress): string {
         addr.country,
     ].filter(Boolean) as string[];
     return parts.join(', ') || 'Current location';
+}
+
+/**
+ * Address for coordinates: Google Geocoding (all platforms), then the device
+ * geocoder on native (not supported on web). Null when neither finds one.
+ */
+async function reverseGeocode(coords: Coordinates): Promise<string | null> {
+    try {
+        const address = await new GoogleMapsService(CONFIG.GOOGLE_MAPS_API_KEY).reverseGeocode(coords);
+        if (address) return address;
+    } catch (err) {
+        console.warn('Google reverse geocoding failed:', err);
+    }
+
+    if (Platform.OS === 'web') return null;
+
+    try {
+        const geocoded = await Location.reverseGeocodeAsync({
+            latitude: coords.lat,
+            longitude: coords.lon,
+        });
+        return geocoded && geocoded[0] ? formatGeocodedAddress(geocoded[0]) : null;
+    } catch {
+        return null;
+    }
 }
 
 interface DestinationInputProps {
@@ -161,26 +187,10 @@ export function DestinationInput({
             };
 
             // Reverse geocode to get address
-            try {
-                const geocoded = await Location.reverseGeocodeAsync({
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                });
-                
-                const addressText = geocoded && geocoded[0] 
-                    ? formatGeocodedAddress(geocoded[0]) 
-                    : 'Current location';
-                
-                onChange(coords, addressText);
-                onTextChange?.(addressText);
-                autocompleteRef?.current?.setAddressText(addressText);
-            } catch (geocodeErr) {
-                // If geocoding fails, still use the coordinates with generic text
-                const addressText = 'Current location';
-                onChange(coords, addressText);
-                onTextChange?.(addressText);
-                autocompleteRef?.current?.setAddressText(addressText);
-            }
+            const addressText = (await reverseGeocode(coords)) ?? 'Current location';
+            onChange(coords, addressText);
+            onTextChange?.(addressText);
+            autocompleteRef?.current?.setAddressText(addressText);
         } catch (err) {
             console.error('Error getting location:', err);
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';

@@ -68,6 +68,34 @@ export class GoogleMapsService {
   }
 
   /**
+   * Reverse geocode coordinates to a human-readable address (Geocoding API)
+   * Returns null when no address is found.
+   */
+  async reverseGeocode(location: Coordinates): Promise<string | null> {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat},${location.lon}&language=en&key=${encodeURIComponent(this.apiKey)}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status === "ZERO_RESULTS") {
+      return null;
+    }
+
+    if (data.status !== "OK") {
+      throw new Error(`Reverse geocoding failed: ${data.status}`);
+    }
+
+    // Prefer a precise street address over areas (neighborhood, city, ...)
+    const results: any[] = data.results ?? [];
+    const best =
+      results.find((r) => r.types?.includes("street_address")) ??
+      results.find((r) => r.types?.includes("route")) ??
+      results[0];
+
+    return best?.formatted_address ?? null;
+  }
+
+  /**
    * Search for places near a specific location (supports multiple types)
    */
   async searchNearLocation(

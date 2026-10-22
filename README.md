@@ -18,6 +18,7 @@ Enable these APIs for the key in Google Cloud Console:
 | Places API (New) | Address autocomplete and nearby transit stops |
 | Maps JavaScript API | Route map on web |
 | Maps SDK for Android | Route map on Android |
+| Geocoding API | Address for "use my current location" |
 
 `EXPO_PUBLIC_*` values are embedded in the app bundle, so the key is visible to users. Protect it with API restrictions (only the APIs above) and application restrictions (HTTP referrers for web, package name + SHA-1 for Android).
 

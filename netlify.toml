@@ -1,0 +1,14 @@
+# Web build for Netlify. Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in the site's
+# environment variables (it is embedded into the bundle at build time).
+[build]
+  command = "npx expo export --platform web"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Single-page app: serve index.html for any path
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

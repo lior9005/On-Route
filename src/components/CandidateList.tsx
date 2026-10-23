@@ -9,21 +9,47 @@ interface CandidateListProps {
   onSelect: (candidate: CandidatePoint) => void;
 }
 
+/**
+ * Display name with an icon for the meeting point type
+ */
+export function meetingPointLabel(candidate: CandidatePoint): string {
+  if (candidate.kind === 'STREET') {
+    return `🏘️ ${candidate.name || 'Side street'}`;
+  }
+  return `🚏 ${candidate.name || 'Transit Station'}`;
+}
+
 function CandidateItem({
   item,
   isSelected,
+  isShortestWalk,
   onSelect,
 }: {
   item: CandidatePoint;
   isSelected: boolean;
+  isShortestWalk: boolean;
   onSelect: () => void;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.item, isSelected && styles.selectedItem]}
+      style={[
+        styles.item,
+        isShortestWalk && styles.shortestWalkItem,
+        isSelected && styles.selectedItem,
+      ]}
       onPress={onSelect}
     >
-      <Text style={styles.name}>{item.name || 'Transit Station'}</Text>
+      {isShortestWalk && (
+        <View style={styles.shortestWalkBadge}>
+          <Text style={styles.shortestWalkBadgeText}>🚶 Shortest walk</Text>
+        </View>
+      )}
+      <Text style={styles.name}>{meetingPointLabel(item)}</Text>
+      {item.extraDriveTime !== undefined && (
+        <Text style={styles.extraTime}>
+          +{secondsToMinutes(item.extraDriveTime)} min vs. your normal route
+        </Text>
+      )}
       <View style={styles.routeInfo}>
         <Text style={styles.routeLabel}>🚗 Your Location → Drop/Pick Location</Text>
         <Text style={styles.routeValue}>
@@ -59,6 +85,14 @@ export function CandidateList({ candidates, selectedId, onSelect }: CandidateLis
     );
   }
 
+  // Highlight the option where the passenger walks the least (only when there is a choice)
+  const shortestWalkId =
+    candidates.length > 1
+      ? candidates.reduce((best, c) =>
+          c.passengerLeg.duration < best.passengerLeg.duration ? c : best,
+        ).id
+      : undefined;
+
   return (
     <ScrollView
       style={styles.list}
@@ -71,6 +105,7 @@ export function CandidateList({ candidates, selectedId, onSelect }: CandidateLis
           key={item.id}
           item={item}
           isSelected={item.id === selectedId}
+          isShortestWalk={item.id === shortestWalkId}
           onSelect={() => onSelect(item)}
         />
       ))}
@@ -93,6 +128,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     minHeight: 150,
   },
+  shortestWalkItem: {
+    backgroundColor: '#E8F5E9',
+    borderLeftWidth: 4,
+    borderLeftColor: '#43A047',
+  },
+  shortestWalkBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#43A047',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 8,
+  },
+  shortestWalkBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   selectedItem: {
     backgroundColor: '#e3f2fd',
     borderLeftWidth: 4,
@@ -103,6 +156,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     color: '#2196F3',
+  },
+  extraTime: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: -8,
+    marginBottom: 12,
   },
   routeInfo: {
     marginBottom: 6,

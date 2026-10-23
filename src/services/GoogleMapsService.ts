@@ -16,11 +16,33 @@ interface BaselineRoute {
 interface DetourRoute {
   leg1: RouteLeg;
   leg2: RouteLeg;
+  /** Where Google placed the stop on the road (may differ from the requested point) */
+  snappedDropoff?: Coordinates;
+}
+
+type TravelMode = "DRIVE" | "WALK";
+
+interface RoutesApiLeg {
+  duration?: string; // e.g. "123s"
+  distanceMeters?: number;
+  polyline?: { encodedPolyline: string };
+  endLocation?: { latLng?: { latitude: number; longitude: number } };
+}
+
+interface RoutesApiRoute {
+  duration?: string;
+  distanceMeters?: number;
+  polyline?: { encodedPolyline: string };
+  legs?: RoutesApiLeg[];
 }
 
 export class GoogleMapsService {
   private apiKey: string;
-  private baseUrl = "https://maps.googleapis.com/maps/api";
+  private routesUrl =
+    "https://routes.googleapis.com/directions/v2:computeRoutes";
+  private routeMatrixUrl =
+    "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
+  private placesUrl = "https://places.googleapis.com/v1/places:searchNearby";
 
   constructor(apiKey: string) {
     // Application Security Requirement: API key passed as parameter (from environment), parameterized queries for all API calls
@@ -34,27 +56,48 @@ export class GoogleMapsService {
     start: Coordinates,
     end: Coordinates,
   ): Promise<BaselineRoute> {
-    const origin = `${start.lat},${start.lon}`;
-    const destination = `${end.lat},${end.lon}`;
+    const route = await this.computeRoute(
+      start,
+      end,
+      [],
+      "DRIVE",
+      "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+      "Failed to fetch baseline route",
+    );
 
-    // Use departure_time=now for real-time traffic data
-    const url = `${this.baseUrl}/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&departure_time=now&key=${encodeURIComponent(this.apiKey)}`;
+    return {
+      polyline: route.polyline?.encodedPolyline ?? "",
+      duration: this.parseDuration(route.duration),
+      distance: route.distanceMeters ?? 0,
+    };
+  }
+
+  /**
+   * Reverse geocode coordinates to a human-readable address (Geocoding API)
+   * Returns null when no address is found.
+   */
+  async reverseGeocode(location: Coordinates): Promise<string | null> {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat},${location.lon}&language=en&key=${encodeURIComponent(this.apiKey)}`;
 
     const response = await fetch(url);
     const data = await response.json();
 
-    if (data.status !== "OK" || !data.routes || data.routes.length === 0) {
-      throw new Error(`Failed to fetch baseline route: ${data.status}`);
+    if (data.status === "ZERO_RESULTS") {
+      return null;
     }
 
-    const route = data.routes[0];
-    const leg = route.legs[0];
+    if (data.status !== "OK") {
+      throw new Error(`Reverse geocoding failed: ${data.status}`);
+    }
 
-    return {
-      polyline: route.overview_polyline.points,
-      duration: leg.duration.value,
-      distance: leg.distance.value,
-    };
+    // Prefer a precise street address over areas (neighborhood, city, ...)
+    const results: any[] = data.results ?? [];
+    const best =
+      results.find((r) => r.types?.includes("street_address")) ??
+      results.find((r) => r.types?.includes("route")) ??
+      results[0];
+
+    return best?.formatted_address ?? null;
   }
 
   /**
@@ -65,27 +108,8 @@ export class GoogleMapsService {
     placeTypes: string[],
     radius: number,
   ): Promise<PlaceResult[]> {
-    // Search for all types in parallel
-    const searchPromises = placeTypes.map((type) =>
-      this.nearbySearch(location, type, radius),
-    );
-
-    const allResults = await Promise.all(searchPromises);
-
-    // Combine results and remove duplicates by place ID
-    const seenIds = new Set<string>();
-    const uniqueResults: PlaceResult[] = [];
-
-    for (const results of allResults) {
-      for (const place of results) {
-        if (!seenIds.has(place.id)) {
-          seenIds.add(place.id);
-          uniqueResults.push(place);
-        }
-      }
-    }
-
-    return uniqueResults;
+    // Places API (New) accepts all types in a single request
+    return this.nearbySearch(location, placeTypes, radius);
   }
 
   /**
@@ -107,7 +131,7 @@ export class GoogleMapsService {
 
     // Search near each sampled point
     for (const point of sampledPoints) {
-      const nearby = await this.nearbySearch(point, placeType, 100);
+      const nearby = await this.nearbySearch(point, [placeType], 100);
 
       for (const place of nearby) {
         if (!seenIds.has(place.id)) {
@@ -129,69 +153,47 @@ export class GoogleMapsService {
     end: Coordinates,
     passengerHome: Coordinates,
   ): Promise<any> {
-    // Fetch the detour route with polylines (with real-time traffic)
-    const detourUrl = `${this.baseUrl}/directions/json?origin=${start.lat},${start.lon}&destination=${end.lat},${end.lon}&waypoints=${candidate.coordinates.lat},${candidate.coordinates.lon}&departure_time=now&key=${encodeURIComponent(this.apiKey)}`;
+    // Fetch the detour route with per-leg polylines (with real-time traffic)
+    // and the walking route from meeting point to passenger home in parallel
+    const [detourRoute, walkingRoute] = await Promise.all([
+      this.computeRoute(
+        start,
+        end,
+        [candidate.coordinates],
+        "DRIVE",
+        "routes.legs.polyline.encodedPolyline",
+        "Failed to fetch route visualization",
+      ),
+      this.computeRoute(
+        candidate.coordinates,
+        passengerHome,
+        [],
+        "WALK",
+        "routes.polyline.encodedPolyline",
+        "Failed to fetch walking route",
+      ),
+    ]);
 
-    const detourResponse = await fetch(detourUrl);
-    const detourData = await detourResponse.json();
+    const legs = detourRoute.legs ?? [];
 
-    if (
-      detourData.status !== "OK" ||
-      !detourData.routes ||
-      detourData.routes.length === 0
-    ) {
-      throw new Error(
-        `Failed to fetch route visualization: ${detourData.status}`,
-      );
+    if (legs.length < 2) {
+      throw new Error("Expected 2 legs in detour route");
     }
 
-    const route = detourData.routes[0];
-    const legs = route.legs;
-
-    // Fetch walking route from meeting point to passenger home
-    const walkingUrl = `${this.baseUrl}/directions/json?origin=${candidate.coordinates.lat},${candidate.coordinates.lon}&destination=${passengerHome.lat},${passengerHome.lon}&mode=walking&key=${encodeURIComponent(this.apiKey)}`;
-
-    const walkingResponse = await fetch(walkingUrl);
-    const walkingData = await walkingResponse.json();
-
-    if (
-      walkingData.status !== "OK" ||
-      !walkingData.routes ||
-      walkingData.routes.length === 0
-    ) {
-      throw new Error(`Failed to fetch walking route: ${walkingData.status}`);
-    }
-
-    // Manually decode and re-encode leg polylines from steps
-    const leg1Points: Coordinates[] = [];
-    const leg2Points: Coordinates[] = [];
-
-    // Decode all steps in leg 1
-    for (const step of legs[0].steps) {
-      const stepPoints = this.decodePolyline(step.polyline.points);
-      leg1Points.push(...stepPoints);
-    }
-
-    // Decode all steps in leg 2
-    for (const step of legs[1].steps) {
-      const stepPoints = this.decodePolyline(step.polyline.points);
-      leg2Points.push(...stepPoints);
-    }
-
-    // Create segments with properly combined polylines
+    // Create segments from the per-leg polylines
     const segments = [
       {
-        polyline: this.encodePolyline(leg1Points),
+        polyline: legs[0].polyline?.encodedPolyline ?? "",
         color: "#4285F4", // Blue - driver to meeting point
         label: "Driver to Meeting Point",
       },
       {
-        polyline: this.encodePolyline(leg2Points),
+        polyline: legs[1].polyline?.encodedPolyline ?? "",
         color: "#34A853", // Green - meeting point to destination
         label: "Driver to Destination",
       },
       {
-        polyline: walkingData.routes[0].overview_polyline.points,
+        polyline: walkingRoute.polyline?.encodedPolyline ?? "",
         color: "#FBBC04", // Orange - passenger walking
         label: "Passenger Walking",
       },
@@ -225,90 +227,191 @@ export class GoogleMapsService {
     dropoff: Coordinates,
     end: Coordinates,
   ): Promise<DetourRoute> {
-    const origin = `${start.lat},${start.lon}`;
-    const waypoint = `${dropoff.lat},${dropoff.lon}`;
-    const destination = `${end.lat},${end.lon}`;
+    const route = await this.computeRoute(
+      start,
+      end,
+      [dropoff],
+      "DRIVE",
+      "routes.legs.duration,routes.legs.distanceMeters,routes.legs.endLocation",
+      "Failed to compute detour route",
+    );
 
-    // Use departure_time=now for real-time traffic data
-    const url = `${this.baseUrl}/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoint)}&departure_time=now&key=${encodeURIComponent(this.apiKey)}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.status !== "OK" || !data.routes || data.routes.length === 0) {
-      throw new Error(`Failed to compute detour route: ${data.status}`);
-    }
-
-    const legs = data.routes[0].legs;
+    const legs = route.legs ?? [];
 
     if (legs.length < 2) {
       throw new Error("Expected 2 legs in detour route");
     }
 
+    const snapped = legs[0].endLocation?.latLng;
+
     return {
       leg1: {
-        duration: legs[0].duration.value,
-        distance: legs[0].distance.value,
+        duration: this.parseDuration(legs[0].duration),
+        distance: legs[0].distanceMeters ?? 0,
       },
       leg2: {
-        duration: legs[1].duration.value,
-        distance: legs[1].distance.value,
+        duration: this.parseDuration(legs[1].duration),
+        distance: legs[1].distanceMeters ?? 0,
       },
+      snappedDropoff: snapped
+        ? { lat: snapped.latitude, lon: snapped.longitude }
+        : undefined,
     };
   }
 
   /**
-   * Search for nearby places
+   * Real walking distance/time from each origin to one destination,
+   * in a single Route Matrix request. Null where no walking route exists.
+   */
+  async computeWalkingLegs(
+    origins: Coordinates[],
+    destination: Coordinates,
+  ): Promise<(RouteLeg | null)[]> {
+    if (origins.length === 0) return [];
+
+    const toWaypoint = (c: Coordinates) => ({
+      waypoint: { location: { latLng: { latitude: c.lat, longitude: c.lon } } },
+    });
+
+    const response = await fetch(this.routeMatrixUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask":
+          "originIndex,destinationIndex,duration,distanceMeters,condition",
+      },
+      body: JSON.stringify({
+        origins: origins.map(toWaypoint),
+        destinations: [toWaypoint(destination)],
+        travelMode: "WALK",
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !Array.isArray(data)) {
+      throw new Error(
+        `Failed to compute walking distances: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
+
+    const legs: (RouteLeg | null)[] = origins.map(() => null);
+    for (const element of data) {
+      if (element.condition !== "ROUTE_EXISTS") continue;
+      // Zero values (e.g. originIndex 0) are omitted from the JSON
+      legs[element.originIndex ?? 0] = {
+        duration: this.parseDuration(element.duration),
+        distance: element.distanceMeters ?? 0,
+      };
+    }
+    return legs;
+  }
+
+  /**
+   * Compute a single route via the Routes API (computeRoutes)
+   */
+  private async computeRoute(
+    origin: Coordinates,
+    destination: Coordinates,
+    intermediates: Coordinates[],
+    travelMode: TravelMode,
+    fieldMask: string,
+    errorMessage: string,
+  ): Promise<RoutesApiRoute> {
+    const toWaypoint = (c: Coordinates) => ({
+      location: { latLng: { latitude: c.lat, longitude: c.lon } },
+    });
+
+    const body: Record<string, unknown> = {
+      origin: toWaypoint(origin),
+      destination: toWaypoint(destination),
+      travelMode,
+    };
+
+    if (intermediates.length > 0) {
+      body.intermediates = intermediates.map(toWaypoint);
+    }
+
+    // TRAFFIC_AWARE uses real-time traffic (departure time defaults to now);
+    // routing preference is only allowed for driving
+    if (travelMode === "DRIVE") {
+      body.routingPreference = "TRAFFIC_AWARE";
+    }
+
+    const response = await fetch(this.routesUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask": fieldMask,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        `${errorMessage}: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
+
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error(`${errorMessage}: ZERO_RESULTS`);
+    }
+
+    return data.routes[0];
+  }
+
+  /**
+   * Parse a Routes API duration string (e.g. "123s") into seconds
+   */
+  private parseDuration(duration?: string): number {
+    return duration ? parseFloat(duration) : 0;
+  }
+
+  /**
+   * Search for nearby places via Places API (New) searchNearby
    */
   private async nearbySearch(
     location: Coordinates,
-    type: string,
+    types: string[],
     radius: number,
   ): Promise<PlaceResult[]> {
-    const allPlaces: PlaceResult[] = [];
-    let nextPageToken: string | null = null;
-    let pageCount = 0;
-    const maxPages = 1; // Limit to 1 page (20 results max per type)
-
-    do {
-      let url: string;
-      if (nextPageToken) {
-        // Wait a bit before requesting next page (Google requires this)
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        url = `${this.baseUrl}/place/nearbysearch/json?pagetoken=${encodeURIComponent(nextPageToken)}&key=${encodeURIComponent(this.apiKey)}`;
-      } else {
-        url = `${this.baseUrl}/place/nearbysearch/json?location=${location.lat},${location.lon}&radius=${radius}&type=${encodeURIComponent(type)}&key=${encodeURIComponent(this.apiKey)}`;
-      }
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-        if (data.status === "INVALID_REQUEST" && nextPageToken) {
-          // Token might not be ready yet, break and return what we have
-          break;
-        }
-        throw new Error(`Nearby search failed: ${data.status}`);
-      }
-
-      if (data.results && data.results.length > 0) {
-        const places = data.results.map((place: any) => ({
-          id: place.place_id,
-          location: {
-            lat: place.geometry.location.lat,
-            lon: place.geometry.location.lng,
+    const response = await fetch(this.placesUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask": "places.id,places.location,places.displayName",
+      },
+      body: JSON.stringify({
+        includedTypes: types,
+        maxResultCount: 20, // API maximum, no pagination
+        locationRestriction: {
+          circle: {
+            center: { latitude: location.lat, longitude: location.lon },
+            radius,
           },
-          name: place.name || "Unknown",
-        }));
+        },
+      }),
+    });
+    const data = await response.json();
 
-        allPlaces.push(...places);
-        pageCount++;
-      }
+    if (!response.ok) {
+      throw new Error(
+        `Nearby search failed: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
 
-      nextPageToken = data.next_page_token || null;
-    } while (nextPageToken && pageCount < maxPages);
-
-    return allPlaces;
+    // An empty object is returned when nothing is found
+    return (data.places ?? []).map((place: any) => ({
+      id: place.id,
+      location: {
+        lat: place.location.latitude,
+        lon: place.location.longitude,
+      },
+      name: place.displayName?.text || "Unknown",
+    }));
   }
 
   /**
@@ -353,44 +456,6 @@ export class GoogleMapsService {
     }
 
     return points;
-  }
-
-  /**
-   * Encode coordinates to Google polyline format
-   */
-  private encodePolyline(coordinates: Coordinates[]): string {
-    let encoded = "";
-    let prevLat = 0;
-    let prevLon = 0;
-
-    for (const coord of coordinates) {
-      const lat = Math.round(coord.lat * 1e5);
-      const lon = Math.round(coord.lon * 1e5);
-
-      encoded += this.encodeNumber(lat - prevLat);
-      encoded += this.encodeNumber(lon - prevLon);
-
-      prevLat = lat;
-      prevLon = lon;
-    }
-
-    return encoded;
-  }
-
-  /**
-   * Encode a single number for polyline
-   */
-  private encodeNumber(num: number): string {
-    let encoded = "";
-    let value = num < 0 ? ~(num << 1) : num << 1;
-
-    while (value >= 0x20) {
-      encoded += String.fromCharCode((0x20 | (value & 0x1f)) + 63);
-      value >>= 5;
-    }
-
-    encoded += String.fromCharCode(value + 63);
-    return encoded;
   }
 
   /**

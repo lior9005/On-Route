@@ -1,12 +1,23 @@
 import { GoogleMapsService } from "./GoogleMapsService";
+import { OsmService } from "./OsmService";
 import { IDropOffStrategy } from "../strategies/IDropOffStrategy";
-import { Coordinates, CandidatePoint } from "../models";
+import { Coordinates, CandidatePoint, RawCandidate, SearchInfo } from "../models";
 import { CONFIG } from "../constants/config";
 import { haversineDistance } from "../utils/distance";
+import { decodePolyline } from "../utils/polylineDecoder";
+import {
+  buildStreetCandidates,
+  closestRouteCandidate,
+  preselectCandidates,
+} from "../utils/streetCandidates";
 
 export class RoutingEngine {
+  /** Details of the most recent optimize() call */
+  lastSearchInfo: SearchInfo | null = null;
+
   constructor(
     private googleMapsService: GoogleMapsService,
+    private osmService: OsmService,
     private strategy: IDropOffStrategy,
   ) {}
 
@@ -20,76 +31,259 @@ export class RoutingEngine {
     passengerHome: Coordinates,
     maxConstraint: number,
   ): Promise<CandidatePoint[]> {
-    // Step 1: Search for transit stations within walking distance of passenger home
+    // Step 1: In parallel - transit stops near the passenger, small streets
+    // near the passenger (OpenStreetMap) and the driver's normal route
     const transitTypes = ["bus_station", "transit_station"];
 
-    const rawCandidates = await this.googleMapsService.searchNearLocation(
-      passengerHome,
-      transitTypes,
-      maxConstraint, // Use max walking distance as search radius
+    const [stopsResult, streetsResult, baselineResult] =
+      await Promise.allSettled([
+        this.googleMapsService.searchNearLocation(
+          passengerHome,
+          transitTypes,
+          maxConstraint, // Use max walking distance as search radius
+        ),
+        this.osmService.fetchStreetNetwork(passengerHome, maxConstraint),
+        this.googleMapsService.fetchBaselineRoute(start, end),
+      ]);
+
+    if (
+      stopsResult.status === "rejected" &&
+      streetsResult.status === "rejected"
+    ) {
+      throw new Error(
+        `${errorText(stopsResult.reason)}; ${errorText(streetsResult.reason)}`,
+      );
+    }
+    if (stopsResult.status === "rejected") {
+      console.warn("Transit stop search failed:", stopsResult.reason);
+    }
+    if (streetsResult.status === "rejected") {
+      console.warn("Street search failed:", streetsResult.reason);
+    }
+
+    const baseline =
+      baselineResult.status === "fulfilled" ? baselineResult.value : null;
+    const driverRoute: Coordinates[] = baseline
+      ? decodePolyline(baseline.polyline).map((p) => ({
+          lat: p.latitude,
+          lon: p.longitude,
+        }))
+      : [];
+
+    // Step 2: Candidate points - transit stops and small-street points
+    const stopCandidates: RawCandidate[] =
+      stopsResult.status === "fulfilled"
+        ? stopsResult.value.map((place) => ({
+            id: place.id,
+            location: place.location,
+            name: place.name,
+            kind: "BUS_STOP" as const,
+          }))
+        : [];
+
+    const streetCandidates: RawCandidate[] = [];
+    if (streetsResult.status === "fulfilled") {
+      const network = streetsResult.value;
+      const closest = closestRouteCandidate(
+        network,
+        passengerHome,
+        maxConstraint,
+        driverRoute,
+      );
+      if (closest) streetCandidates.push(closest);
+      streetCandidates.push(
+        ...buildStreetCandidates(
+          network,
+          passengerHome,
+          maxConstraint,
+          driverRoute,
+        ),
+      );
+    }
+
+    // Step 3: Pre-filter without API calls - likely within walking range
+    // (straight line, with room for the real path being longer), merged,
+    // best estimated detours first, capped for cost
+    const maxStraightLine = maxConstraint * CONFIG.WALK_PREFILTER_RATIO;
+    const preselected = preselectCandidates(
+      [...stopCandidates, ...streetCandidates].filter(
+        (c) => haversineDistance(c.location, passengerHome) <= maxStraightLine,
+      ),
+      start,
+      end,
+      CONFIG.CANDIDATE_MERGE_RADIUS_METERS,
+      CONFIG.MAX_CANDIDATES_TO_EVALUATE,
     );
 
-    if (rawCandidates.length === 0) {
+    const info: SearchInfo = {
+      busStops: stopCandidates.length,
+      busStopError:
+        stopsResult.status === "rejected" ? errorText(stopsResult.reason) : undefined,
+      streetPoints: streetCandidates.length,
+      streetError:
+        streetsResult.status === "rejected" ? errorText(streetsResult.reason) : undefined,
+      evaluated: preselected.length,
+      tooFarToWalk: 0,
+      movedToOtherRoad: 0,
+      routeErrors: 0,
+    };
+    this.lastSearchInfo = info;
+
+    if (preselected.length === 0) {
       return [];
     }
 
-    // Step 2: For each bus station, calculate detour route and walking distance
-    const validationPromises = rawCandidates.map(async (rawCandidate) => {
-      // Validate walking distance from meeting point (D) to passenger home (B)
-      const passengerLeg = await this.strategy.validate(
-        rawCandidate.location,
-        passengerHome,
-        maxConstraint,
-      );
-
-      if (!passengerLeg) {
-        return null;
-      }
-
-      // Compute detour route: Start (A) → Meeting Point (D) → Destination (C)
-      const detourRoute = await this.googleMapsService.computeDetourRoute(
-        start,
-        rawCandidate.location,
-        end,
-      );
-
-      // Create candidate point
-      const candidate: CandidatePoint = {
-        id: rawCandidate.id,
-        coordinates: rawCandidate.location,
-        leg1: detourRoute.leg1,
-        leg2: detourRoute.leg2,
-        passengerLeg,
-        totalDetour: detourRoute.leg1.duration + detourRoute.leg2.duration,
-        placeId: rawCandidate.id,
-        name: rawCandidate.name,
-      };
-
-      return candidate;
-    });
-
-    // Step 3: Wait for all calculations
-    const candidates = await Promise.all(validationPromises);
-
-    // Step 4: Filter out nulls (stations that failed validation)
-    const validCandidates = candidates.filter(
-      (c): c is CandidatePoint => c !== null,
+    // Step 4: Validate passenger leg (real walking distance, one batched request)
+    const passengerLegs = await this.strategy.validate(
+      preselected.map((c) => c.location),
+      passengerHome,
+      maxConstraint,
     );
 
-    // Step 5: Sort by total detour time (shortest first)
-    validCandidates.sort((a, b) => a.totalDetour - b.totalDetour);
+    // Step 5: For each valid point, calculate detour route
+    // Start (A) → Meeting Point (D) → Destination (C)
+    const detourResults = await Promise.allSettled(
+      preselected.map(async (rawCandidate, i) => {
+        const passengerLeg = passengerLegs[i];
+        if (!passengerLeg) {
+          info.tooFarToWalk++;
+          return null;
+        }
 
-    // Step 6: Merge candidates within CANDIDATE_MERGE_RADIUS_METERS; keep best per cluster
+        const detourRoute = await this.googleMapsService.computeDetourRoute(
+          start,
+          rawCandidate.location,
+          end,
+        );
+
+        // Google stops the car on the nearest road; if that is far from the
+        // street point it may be a bigger road, so drop it
+        if (
+          rawCandidate.kind === "STREET" &&
+          detourRoute.snappedDropoff &&
+          haversineDistance(detourRoute.snappedDropoff, rawCandidate.location) >
+            CONFIG.MAX_SNAP_DISTANCE_METERS
+        ) {
+          info.movedToOtherRoad++;
+          return null;
+        }
+
+        const totalDetour =
+          detourRoute.leg1.duration + detourRoute.leg2.duration;
+
+        const candidate: CandidatePoint = {
+          id: rawCandidate.id,
+          coordinates: rawCandidate.location,
+          leg1: detourRoute.leg1,
+          leg2: detourRoute.leg2,
+          passengerLeg,
+          totalDetour,
+          placeId: rawCandidate.kind === "BUS_STOP" ? rawCandidate.id : undefined,
+          name: rawCandidate.name,
+          kind: rawCandidate.kind,
+          extraDriveTime: baseline
+            ? Math.max(0, totalDetour - baseline.duration)
+            : undefined,
+        };
+
+        return candidate;
+      }),
+    );
+
+    // Step 6: Keep successful, valid candidates
+    info.routeErrors = detourResults.filter((r) => r.status === "rejected").length;
+
+    const validCandidates = detourResults
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((c): c is CandidatePoint => c !== null);
+
+    if (validCandidates.length === 0) {
+      const failure = detourResults.find((r) => r.status === "rejected");
+      if (failure) {
+        throw (failure as PromiseRejectedResult).reason;
+      }
+    }
+
+    // Step 7: Rank by driving time; near-equal driving times (within
+    // DRIVE_TIME_TIE_SECONDS) are decided by the shorter passenger walk
+    const ranked = rankCandidates(validCandidates, CONFIG.DRIVE_TIME_TIE_SECONDS);
+
+    // Step 8: Merge candidates within CANDIDATE_MERGE_RADIUS_METERS; keep best per cluster
     const merged: CandidatePoint[] = [];
     const mergeRadius = CONFIG.CANDIDATE_MERGE_RADIUS_METERS;
-    for (const c of validCandidates) {
+    for (const c of ranked) {
       const tooClose = merged.some(
         (m) => haversineDistance(c.coordinates, m.coordinates) < mergeRadius,
       );
       if (!tooClose) merged.push(c);
     }
 
-    // Step 7: Return top N candidates
+    // Step 9: Return top N candidates
     return merged.slice(0, CONFIG.TOP_CANDIDATES_COUNT);
   }
+}
+
+/**
+ * Order candidates best first: repeatedly take, among the candidates whose
+ * driving time is within `tieSeconds` of the fastest remaining one, the one
+ * with the shortest passenger leg.
+ */
+export function rankCandidates(
+  candidates: CandidatePoint[],
+  tieSeconds: number,
+): CandidatePoint[] {
+  const remaining = [...candidates];
+  const ranked: CandidatePoint[] = [];
+
+  while (remaining.length > 0) {
+    const fastest = Math.min(...remaining.map((c) => c.totalDetour));
+    let bestIndex = -1;
+    remaining.forEach((c, i) => {
+      if (c.totalDetour > fastest + tieSeconds) return;
+      const best = bestIndex >= 0 ? remaining[bestIndex] : null;
+      if (
+        !best ||
+        c.passengerLeg.duration < best.passengerLeg.duration ||
+        (c.passengerLeg.duration === best.passengerLeg.duration &&
+          c.totalDetour < best.totalDetour)
+      ) {
+        bestIndex = i;
+      }
+    });
+    ranked.push(remaining.splice(bestIndex, 1)[0]);
+  }
+
+  return ranked;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function errorText(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/**
+ * One-line summary of a search, e.g. "Checked 4 bus stops and 38 street points"
+ */
+export function describeSearch(info: SearchInfo): string {
+  const parts = [
+    info.busStopError
+      ? `Bus stop search failed (${info.busStopError})`
+      : plural(info.busStops, "bus stop"),
+    info.streetError
+      ? `street search failed (${info.streetError})`
+      : plural(info.streetPoints, "street point"),
+  ];
+  const dropped = [
+    info.tooFarToWalk && `${info.tooFarToWalk} too far to walk`,
+    info.movedToOtherRoad && `${info.movedToOtherRoad} on another road`,
+    info.routeErrors && `${info.routeErrors} route errors`,
+  ].filter(Boolean);
+
+  return (
+    `Found ${parts.join(", ")}; compared the best ${info.evaluated}` +
+    (dropped.length ? ` (${dropped.join(", ")})` : "")
+  );
 }

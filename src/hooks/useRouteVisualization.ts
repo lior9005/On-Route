@@ -19,6 +19,15 @@ export function useRouteVisualization() {
     ) => {
       setLoading(true);
       setError(null);
+      const startedAt = Date.now();
+      // Keep the loading screen up for a minimum time, even on fast answers
+      const minimumWait = () =>
+        new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            Math.max(0, CONFIG.ROUTE_PREVIEW_MIN_LOADING_MS - (Date.now() - startedAt)),
+          ),
+        );
 
       try {
         const googleMapsService = new GoogleMapsService(
@@ -30,6 +39,7 @@ export function useRouteVisualization() {
           end,
           passengerHome,
         );
+        await minimumWait();
         setVisualization(result);
       } catch (err) {
         const errorMessage =

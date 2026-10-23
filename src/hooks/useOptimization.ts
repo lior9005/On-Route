@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { CandidatePoint, Coordinates } from "../models";
 import { GoogleMapsService } from "../services/GoogleMapsService";
-import { RoutingEngine } from "../services/RoutingEngine";
+import { OsmService } from "../services/OsmService";
+import { RoutingEngine, describeSearch } from "../services/RoutingEngine";
 import { WalkingStrategy } from "../strategies/WalkingStrategy";
 import { CONFIG } from "../constants/config";
 
@@ -16,19 +17,25 @@ export function useOptimization() {
   const [candidates, setCandidates] = useState<CandidatePoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchSummary, setSearchSummary] = useState<string | null>(null);
 
   const runOptimization = useCallback(async (params: OptimizationParams) => {
     setLoading(true);
     setError(null);
     setCandidates([]);
+    setSearchSummary(null);
 
     try {
       // Initialize services
       const googleMapsService = new GoogleMapsService(
         CONFIG.GOOGLE_MAPS_API_KEY,
       );
-      const strategy = new WalkingStrategy();
-      const routingEngine = new RoutingEngine(googleMapsService, strategy);
+      const strategy = new WalkingStrategy(googleMapsService);
+      const routingEngine = new RoutingEngine(
+        googleMapsService,
+        new OsmService(),
+        strategy,
+      );
 
       // Run optimization
       const results = await routingEngine.optimize(
@@ -39,10 +46,15 @@ export function useOptimization() {
       );
 
       setCandidates(results);
+      const summary = routingEngine.lastSearchInfo
+        ? describeSearch(routingEngine.lastSearchInfo)
+        : null;
+      setSearchSummary(summary);
 
       if (results.length === 0) {
         setError(
-          "No suitable drop/pick locations found. Try increasing the maximum walking distance.",
+          "No suitable drop/pick locations found. Try increasing the maximum walking distance." +
+            (summary ? `\n\n${summary}` : ""),
         );
       }
     } catch (err) {
@@ -63,6 +75,7 @@ export function useOptimization() {
     candidates,
     loading,
     error,
+    searchSummary,
     runOptimization,
     clearCandidates,
   };

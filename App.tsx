@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
 import { CandidateList } from './src/components/CandidateList';
+import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
 import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
 import { Coordinates, CandidatePoint } from './src/models';
 import { CONFIG } from './src/constants/config';
+import { showAlert } from './src/utils/alert';
 
 function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function App() {
   const formScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   const { journey, saveJourney, advanceStage, clearJourney } = useJourneyState();
-  const { candidates, loading, error, runOptimization, clearCandidates } = useOptimization();
+  const { candidates, loading, error, searchSummary, runOptimization, clearCandidates } = useOptimization();
 
   const handleFindDropoff = async () => {
     const startEmpty = !driverStartText.trim();
@@ -78,7 +80,7 @@ export default function App() {
       return;
     }
     if (!driverStart || !driverDestination || !passengerHome) {
-      Alert.alert('Missing Information', 'Please enter all three locations');
+      showAlert('Missing Information', 'Please enter all three locations');
       return;
     }
     setShowValidationErrors(false);
@@ -651,7 +653,7 @@ export default function App() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <SearchingIndicator />
               ) : (
                 <View style={styles.formButtonContent}>
                   <Text style={styles.formButtonIcon}>🔍</Text>
@@ -690,6 +692,9 @@ export default function App() {
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle}>Select Drop/Pick Location</Text>
                 <Text style={styles.modalSubtitle}>{candidates.length} options found</Text>
+                {searchSummary && (
+                  <Text style={styles.searchSummary}>{searchSummary}</Text>
+                )}
               </View>
               <TouchableOpacity 
                 style={styles.closeButton}
@@ -804,7 +809,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   formButtonDisabled: {
-    backgroundColor: '#90CAF9',
+    backgroundColor: '#1976D2', // Searching: darker, keeps the animation readable
   },
   formButtonContent: {
     flexDirection: 'row',
@@ -897,6 +902,11 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 14,
     color: '#666',
+  },
+  searchSummary: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
   },
   closeButton: {
     width: 32,

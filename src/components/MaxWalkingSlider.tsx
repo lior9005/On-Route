@@ -21,10 +21,8 @@ export function LabeledSlider({ icon, label, value, unit, min, max, step, onValu
   return (
     <View style={styles.container}>
       <View style={styles.labelContainer}>
-        <Text style={styles.labelIcon}>{icon}</Text>
-        <Text style={styles.label}>
-          {label}: <Text style={styles.valueText}>{value}{unit}</Text>
-        </Text>
+        <Text style={styles.label}>{icon} {label}</Text>
+        <Text style={styles.valueText}>{value}{unit}</Text>
       </View>
       <View style={styles.sliderContainer}>
         <Slider
@@ -56,7 +54,7 @@ export function MaxWalkingSlider({ value, onValueChange }: ValueSliderProps) {
   return (
     <LabeledSlider
       icon="🚶"
-      label="Max Walking Distance"
+      label="Max walking distance"
       value={value}
       unit="m"
       min={CONFIG.MIN_WALKING_DISTANCE}
@@ -74,7 +72,7 @@ export function MaxDetourSlider({ value, onValueChange }: ValueSliderProps) {
   return (
     <LabeledSlider
       icon="🚗"
-      label="Max Extra Driving"
+      label="Max extra driving"
       value={value}
       unit=" min"
       min={CONFIG.MIN_DETOUR_MINUTES}
@@ -93,20 +91,18 @@ const styles = StyleSheet.create({
   labelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  labelIcon: {
-    fontSize: 20,
-    marginRight: 8,
+    justifyContent: 'space-between',
+    marginBottom: 2,
+    marginHorizontal: 2,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7785',
   },
   valueText: {
-    color: '#2196F3',
+    fontSize: 15,
+    color: '#1976D2',
     fontWeight: '800',
   },
   sliderContainer: {

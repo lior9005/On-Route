@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { SegmentedControl } from './SegmentedControl';
 
@@ -42,6 +42,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * When the driver leaves: now, or a planned day and time (next 7 days)
  */
 export function DepartureTimePicker({ value, onChange }: DepartureTimePickerProps) {
+  const [editing, setEditing] = useState(false);
   const now = new Date();
   const isPast = value !== null && value.getTime() <= now.getTime();
 
@@ -67,18 +68,34 @@ export function DepartureTimePicker({ value, onChange }: DepartureTimePickerProp
     return d;
   });
 
+  const timeText = value ? `${pad(value.getHours())}:${pad(value.getMinutes())}` : '';
+  const dateText = value ? `${WEEKDAYS[value.getDay()]} ${value.getDate()} ${MONTHS[value.getMonth()]}` : '';
+
   return (
     <View style={styles.container}>
       <SegmentedControl<'NOW' | 'LATER'>
+        label="When"
         options={[
-          { value: 'NOW', label: '🕒 Leave now' },
-          { value: 'LATER', label: '📅 Plan a ride' },
+          { value: 'NOW', label: 'Now' },
+          { value: 'LATER', label: 'Later' },
         ]}
         value={value ? 'LATER' : 'NOW'}
-        onChange={(mode) => onChange(mode === 'NOW' ? null : value ?? defaultPlannedTime())}
+        onChange={(mode) => {
+          if (mode === 'LATER' && !value) setEditing(true);
+          onChange(mode === 'NOW' ? null : value ?? defaultPlannedTime());
+        }}
       />
 
-      {value && (
+      {value && !editing && (
+        <TouchableOpacity style={styles.summaryChip} onPress={() => setEditing(true)} activeOpacity={0.8}>
+          <Text style={[styles.summaryChipText, isPast && styles.summaryPast]}>
+            {isPast ? '⚠️ Time has passed' : `📅 ${dateText} · ${timeText}`}
+          </Text>
+          <Text style={styles.changeText}>Change</Text>
+        </TouchableOpacity>
+      )}
+
+      {value && editing && (
         <View style={styles.planner}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.days}>
             {days.map((day) => {
@@ -98,52 +115,64 @@ export function DepartureTimePicker({ value, onChange }: DepartureTimePickerProp
             })}
           </ScrollView>
 
-          <View style={styles.timeRow}>
-            <Stepper label="Hour" onMinus={() => shiftMinutes(-60)} onPlus={() => shiftMinutes(60)} />
-            <Text style={styles.time}>
-              {pad(value.getHours())}:{pad(value.getMinutes())}
-            </Text>
-            <Stepper
-              label="Min"
-              onMinus={() => shiftMinutes(-MINUTE_STEP)}
-              onPlus={() => shiftMinutes(MINUTE_STEP)}
-            />
+          <Text style={styles.time}>{timeText}</Text>
+          <View style={styles.stepRow}>
+            <StepButton label="−1 h" onPress={() => shiftMinutes(-60)} />
+            <StepButton label={`−${MINUTE_STEP} min`} onPress={() => shiftMinutes(-MINUTE_STEP)} />
+            <StepButton label={`+${MINUTE_STEP} min`} onPress={() => shiftMinutes(MINUTE_STEP)} />
+            <StepButton label="+1 h" onPress={() => shiftMinutes(60)} />
           </View>
 
-          <Text style={[styles.summary, isPast && styles.summaryPast]}>
-            {isPast
-              ? '⚠️ That time has passed. Pick a later time.'
-              : `Driver leaves ${WEEKDAYS[value.getDay()]} ${value.getDate()} ${MONTHS[value.getMonth()]}, ${pad(value.getHours())}:${pad(value.getMinutes())}`}
-          </Text>
+          <View style={styles.plannerFooter}>
+            <Text style={[styles.summary, isPast && styles.summaryPast]}>
+              {isPast ? '⚠️ That time has passed. Pick a later time.' : `Driver leaves ${dateText}, ${timeText}`}
+            </Text>
+            <TouchableOpacity onPress={() => setEditing(false)} disabled={isPast}>
+              <Text style={[styles.doneText, isPast && styles.doneDisabled]}>Done</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
   );
 }
 
-function Stepper({ label, onMinus, onPlus }: { label: string; onMinus: () => void; onPlus: () => void }) {
+function StepButton({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <View style={styles.stepper}>
-      <TouchableOpacity style={styles.stepButton} onPress={onMinus} accessibilityLabel={`${label} earlier`}>
-        <Text style={styles.stepButtonText}>−</Text>
-      </TouchableOpacity>
-      <Text style={styles.stepLabel}>{label}</Text>
-      <TouchableOpacity style={styles.stepButton} onPress={onPlus} accessibilityLabel={`${label} later`}>
-        <Text style={styles.stepButtonText}>+</Text>
-      </TouchableOpacity>
-    </View>
+    <TouchableOpacity style={styles.stepButton} onPress={onPress} accessibilityLabel={label} activeOpacity={0.7}>
+      <Text style={styles.stepButtonText}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginTop: 4,
+  container: {},
+  summaryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F6F8FB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginTop: -6,
+    marginBottom: 14,
+  },
+  summaryChipText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E3A5F',
+  },
+  changeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1976D2',
   },
   planner: {
     backgroundColor: '#F6F8FB',
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 12,
-    marginTop: -4,
+    marginTop: -6,
     marginBottom: 14,
   },
   days: {
@@ -152,70 +181,73 @@ const styles = StyleSheet.create({
   },
   dayChip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
+    paddingVertical: 7,
+    borderRadius: 16,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#DDE3EA',
   },
   dayChipSelected: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
+    backgroundColor: '#E3F2FD',
+    borderColor: '#1976D2',
   },
   dayText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#444',
+    color: '#4A5561',
   },
   dayTextSelected: {
-    color: '#fff',
+    color: '#1976D2',
   },
-  timeRow: {
+  time: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#1E3A5F',
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  stepButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#DDE3EA',
+  },
+  stepButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1976D2',
+  },
+  plannerFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 12,
   },
-  time: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1E3A5F',
-    letterSpacing: 1,
-  },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  stepButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#DDE3EA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepButtonText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#2196F3',
-    lineHeight: 22,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-  },
   summary: {
-    marginTop: 10,
+    flex: 1,
     fontSize: 13,
-    color: '#555',
-    textAlign: 'center',
+    color: '#4A5561',
+    marginRight: 12,
   },
   summaryPast: {
     color: '#D32F2F',
     fontWeight: '600',
+  },
+  doneText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1976D2',
+  },
+  doneDisabled: {
+    color: '#B0BAC5',
   },
 });

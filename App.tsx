@@ -658,6 +658,11 @@ export default function App() {
               onPassengerHomeTextChange={setPassengerHomeText}
             />
 
+          <View style={styles.rideOptionsHeader}>
+            <Text style={styles.rideOptionsTitle}>RIDE OPTIONS</Text>
+            <View style={styles.rideOptionsLine} />
+          </View>
+
           <DepartureTimePicker
             value={departureTime}
             onChange={(value) => {
@@ -667,8 +672,9 @@ export default function App() {
           />
 
           <SegmentedControl<TravelMode>
+            label="Passenger travels by"
             options={[
-              { value: 'WALK', label: '🚶 Walk' },
+              { value: 'WALK', label: '🚶 Walking' },
               { value: 'BUS', label: '🚌 Bus' },
             ]}
             value={travelMode}
@@ -680,6 +686,7 @@ export default function App() {
 
           {travelMode === 'BUS' && (
             <SegmentedControl<TripDirection>
+              label="Trip"
               options={[
                 { value: 'DROP_OFF', label: 'Drop-off' },
                 { value: 'PICK_UP', label: 'Pick-up' },
@@ -840,6 +847,24 @@ const styles = StyleSheet.create({
     color: '#B0BEC5',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  rideOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  rideOptionsTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#8A96A3',
+    letterSpacing: 1.2,
+    marginRight: 10,
+  },
+  rideOptionsLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E6EAF0',
   },
   formCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.98)',

@@ -84,6 +84,7 @@ export class GoogleMapsService {
   async fetchBaselineRoute(
     start: Coordinates,
     end: Coordinates,
+    departureTime?: Date | null,
   ): Promise<BaselineRoute> {
     const route = await this.computeRoute(
       start,
@@ -92,6 +93,7 @@ export class GoogleMapsService {
       "DRIVE",
       "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
       "Failed to fetch baseline route",
+      departureTime,
     );
 
     return {
@@ -343,6 +345,7 @@ export class GoogleMapsService {
     start: Coordinates,
     dropoff: Coordinates,
     end: Coordinates,
+    departureTime?: Date | null,
   ): Promise<DetourRoute> {
     const route = await this.computeRoute(
       start,
@@ -351,6 +354,7 @@ export class GoogleMapsService {
       "DRIVE",
       "routes.legs.duration,routes.legs.distanceMeters,routes.legs.endLocation",
       "Failed to compute detour route",
+      departureTime,
     );
 
     const legs = route.legs ?? [];
@@ -434,6 +438,7 @@ export class GoogleMapsService {
     travelMode: TravelMode,
     fieldMask: string,
     errorMessage: string,
+    departureTime?: Date | null,
   ): Promise<RoutesApiRoute> {
     const toWaypoint = (c: Coordinates) => ({
       location: { latLng: { latitude: c.lat, longitude: c.lon } },
@@ -453,6 +458,10 @@ export class GoogleMapsService {
     // routing preference is only allowed for driving
     if (travelMode === "DRIVE") {
       body.routingPreference = "TRAFFIC_AWARE";
+      // Planned rides: predicted traffic at that time (must be in the future)
+      if (departureTime && departureTime.getTime() > Date.now() + 60_000) {
+        body.departureTime = departureTime.toISOString();
+      }
     }
 
     const response = await fetch(this.routesUrl, {

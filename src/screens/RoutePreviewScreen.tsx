@@ -314,6 +314,11 @@ export function RoutePreviewScreen({
             {busTrip.map((line) => (
               <Text key={line} style={styles.segmentDetails}>{line}</Text>
             ))}
+            {!!candidate.driverWaitSeconds && (
+              <Text style={styles.segmentDetails}>
+                ⏳ Driver waits {secondsToMinutes(candidate.driverWaitSeconds)} min at the stop
+              </Text>
+            )}
           </View>
         ) : (
           <View style={styles.routeSegment}>

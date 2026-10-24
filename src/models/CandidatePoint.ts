@@ -71,6 +71,7 @@ export interface SearchInfo {
 
 export type TransitRejection =
   | "OVER_DETOUR"
+  | "DRIVER_WAIT_TOO_LONG"
   | "NO_DIRECT_BUS"
   | "TOO_MUCH_WALKING"
   | "TOO_LONG"
@@ -88,6 +89,7 @@ export interface CandidatePoint {
   name?: string; // e.g., "Main St & 5th Ave"
   kind?: MeetingPointKind;
   extraDriveTime?: number; // seconds added vs. the driver's normal route
-  meetTime?: string; // ISO time the driver reaches the meeting point (bus mode)
+  meetTime?: string; // ISO meeting time at the meeting point (bus mode)
+  driverWaitSeconds?: number; // Bus pick-up: driver waits for the hitchhiker
   combinedTime?: number; // Bus mode ranking: extraDriveTime + passenger trip (seconds)
 }

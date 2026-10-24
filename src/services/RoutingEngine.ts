@@ -28,7 +28,8 @@ export interface SearchParams {
   mode: TravelMode;
   maxWalkingDistance: number; // Walk mode (meters)
   direction: TripDirection; // Bus mode
-  maxDetourMinutes: number; // Bus mode: max extra driving for the driver
+  maxDetourMinutes: number; // Bus mode: max extra driving (+ waiting) for the driver
+  departureTime?: Date | null; // Planned ride; null/undefined = leave now
 }
 
 export class RoutingEngine {
@@ -55,6 +56,7 @@ export class RoutingEngine {
       params.end,
       params.passengerHome,
       params.maxWalkingDistance,
+      params.departureTime,
     );
   }
 
@@ -67,6 +69,7 @@ export class RoutingEngine {
     end: Coordinates,
     passengerHome: Coordinates,
     maxConstraint: number,
+    departureTime?: Date | null,
   ): Promise<CandidatePoint[]> {
     // Step 1: In parallel - transit stops near the passenger, small streets
     // near the passenger (OpenStreetMap) and the driver's normal route
@@ -80,7 +83,7 @@ export class RoutingEngine {
           maxConstraint, // Use max walking distance as search radius
         ),
         this.osmService.fetchStreetNetwork(passengerHome, maxConstraint),
-        this.googleMapsService.fetchBaselineRoute(start, end),
+        this.googleMapsService.fetchBaselineRoute(start, end, departureTime),
       ]);
 
     if (
@@ -191,6 +194,7 @@ export class RoutingEngine {
           start,
           rawCandidate.location,
           end,
+          departureTime,
         );
 
         // Google stops the car on the nearest road; if that is far from the
@@ -270,10 +274,15 @@ export class RoutingEngine {
       throw new Error("Bus option is not available");
     }
     const maxDetourSeconds = params.maxDetourMinutes * 60;
-    const searchStartedAt = Date.now();
+    const departureTime = params.departureTime ?? null;
+    const leaveAt = departureTime ? departureTime.getTime() : Date.now();
 
     // Step 1: The driver's normal route (needed to search along it)
-    const baseline = await this.googleMapsService.fetchBaselineRoute(start, end);
+    const baseline = await this.googleMapsService.fetchBaselineRoute(
+      start,
+      end,
+      departureTime,
+    );
 
     // Step 2: Bus stops along that route
     const info: SearchInfo = {
@@ -336,6 +345,7 @@ export class RoutingEngine {
           start,
           stop.location,
           end,
+          departureTime,
         );
         const totalDetour =
           detourRoute.leg1.duration + detourRoute.leg2.duration;
@@ -345,14 +355,17 @@ export class RoutingEngine {
           return null;
         }
 
-        const meetTime = new Date(
-          searchStartedAt + detourRoute.leg1.duration * 1000,
+        const driverArrival = new Date(
+          leaveAt + detourRoute.leg1.duration * 1000,
         );
+        // Pick-up: the driver may wait for the hitchhiker, within what is
+        // left of the extra-time budget
         const evaluation = await this.transitStrategy!.evaluate(
           stop.location,
           passengerHome,
           direction,
-          meetTime,
+          driverArrival,
+          maxDetourSeconds - extraDriveTime,
         );
         if (!evaluation.ok) {
           reject(evaluation.reason);
@@ -370,8 +383,10 @@ export class RoutingEngine {
           name: stop.name,
           kind: "BUS_STOP",
           extraDriveTime,
-          meetTime: meetTime.toISOString(),
-          combinedTime: extraDriveTime + evaluation.leg.duration,
+          driverWaitSeconds: evaluation.driverWaitSeconds,
+          meetTime: evaluation.meetTime.toISOString(),
+          combinedTime:
+            extraDriveTime + evaluation.driverWaitSeconds + evaluation.leg.duration,
         };
         return candidate;
       }),
@@ -488,6 +503,7 @@ export function describeSearch(info: SearchInfo): string {
 
 const TRANSIT_REJECTION_TEXT: Record<TransitRejection, string> = {
   OVER_DETOUR: "too far for the driver",
+  DRIVER_WAIT_TOO_LONG: "driver would wait too long",
   NO_DIRECT_BUS: "no direct bus",
   TOO_MUCH_WALKING: "too much walking",
   TOO_LONG: "bus trip too long",

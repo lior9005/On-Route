@@ -46,6 +46,8 @@ The web app calls every API directly from the browser, so each one must allow CO
 
 ## Meeting point search: bus mode (RoutingEngine.optimizeTransit)
 
+The form has a **Leave now / Plan a ride** switch (`DepartureTimePicker`: next 7 days, 15-minute steps). A planned time is passed as `departureTime` to every DRIVE request, for predicted traffic, and is the base for the bus timings. The map preview's route request still uses "now", since it only draws lines.
+
 The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch and a "Max extra driving" slider instead of the walking slider.
 
 1. Fetch the driver's normal route A→C, then the bus stops along it: Places Text Search with `searchAlongRouteParameters` and `includedType: bus_stop`, falling back to `transit_station`.
@@ -54,6 +56,7 @@ The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch 
 4. Bus trip: Routes API `TRANSIT` with bus only, `FEWER_TRANSFERS` and alternatives.
    - **Drop-off:** stop→home with `departureTime = T + 5 min`.
    - **Pick-up:** home→stop with `arrivalTime = T − 5 min`.
+   - **Pick-up fallback, driver waits:** if the hitchhiker can't make it in time, request the earliest bus (`departureTime = now + 2 min`). They meet at max(T, hitchhiker at the stop + 5 min). The driver's wait plus the extra driving must fit within "Max extra driving", and the wait counts in the combined ranking (`evaluatePickupWithDriverWait`).
 5. Rules (`config.ts` `TRANSIT_*`):
    - exactly one bus, no transfers;
    - walking ≤ 800 m;
@@ -74,6 +77,7 @@ Cloud sessions usually cannot reach Google, OpenFreeMap or Netlify. Verify chang
 
 - running pure logic (`src/utils/*`, `rankCandidates`) with `npx tsx` on made-up geometry
 - building the web bundle and driving it with Playwright (Chromium is preinstalled), mocking the endpoints with `page.route`. Tiles can be produced locally with `geojson-vt` + `vt-pbf`.
+- real Google data is reachable from cloud sessions: run the engine with `npx tsx` and the env key (`NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`). Fake `Date` to test weekday service: on Shabbat only weekend lines run, so bus results look empty.
 - for bus mode: mock Text Search, and DRIVE and TRANSIT `computeRoutes`. Google's transit `arrivalTime` covers arrival at the destination including the final walk. Note that the switches are `<button>` elements and the Find button can be below the fold, so scroll into view before clicking.
 
 Say clearly what was verified with mocks and what still needs a real-world check.

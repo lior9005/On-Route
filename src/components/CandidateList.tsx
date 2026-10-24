@@ -56,6 +56,7 @@ function CandidateItem({
       {item.extraDriveTime !== undefined && (
         <Text style={styles.extraTime}>
           +{secondsToMinutes(item.extraDriveTime)} min vs. your normal route
+          {item.driverWaitSeconds ? ` · ⏳ driver waits ${secondsToMinutes(item.driverWaitSeconds)} min` : ''}
         </Text>
       )}
       <View style={styles.routeInfo}>
@@ -89,7 +90,7 @@ function CandidateItem({
       )}
       <View style={styles.totalInfo}>
         <Text style={styles.totalLabel}>
-          {busTrip ? 'Extra driving + bus trip:' : 'Total Driving:'}
+          {busTrip ? 'Driver extra time + bus trip:' : 'Total Driving:'}
         </Text>
         <Text style={styles.totalValue}>
           {secondsToMinutes(busTrip ? item.combinedTime ?? 0 : item.totalDetour)} min

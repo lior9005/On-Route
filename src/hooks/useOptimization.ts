@@ -15,6 +15,7 @@ interface OptimizationParams {
   maxWalkingDistance: number;
   direction: TripDirection;
   maxDetourMinutes: number;
+  departureTime: Date | null; // null = leave now
 }
 
 export function useOptimization() {

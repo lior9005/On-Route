@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
 import { SegmentedControl } from './src/components/SegmentedControl';
+import { DepartureTimePicker } from './src/components/DepartureTimePicker';
 import { CandidateList } from './src/components/CandidateList';
 import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
@@ -48,6 +49,7 @@ export default function App() {
   const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
   const [tripDirection, setTripDirection] = useState<TripDirection>('DROP_OFF');
   const [maxDetourMinutes, setMaxDetourMinutes] = useState<number>(CONFIG.DEFAULT_MAX_DETOUR_MINUTES);
+  const [departureTime, setDepartureTime] = useState<Date | null>(null); // null = leave now
   const [selectedCandidate, setSelectedCandidate] = useState<CandidatePoint | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showCandidatesModal, setShowCandidatesModal] = useState(false);
@@ -87,6 +89,10 @@ export default function App() {
       showAlert('Missing Information', 'Please enter all three locations');
       return;
     }
+    if (departureTime && departureTime.getTime() <= Date.now()) {
+      showAlert('Departure time passed', 'Pick a later time, or choose "Leave now".');
+      return;
+    }
     setShowValidationErrors(false);
 
     await runOptimization({
@@ -97,6 +103,7 @@ export default function App() {
       maxWalkingDistance,
       direction: tripDirection,
       maxDetourMinutes,
+      departureTime,
     });
   };
 
@@ -647,6 +654,14 @@ export default function App() {
               onDriverDestinationTextChange={setDriverDestinationText}
               onPassengerHomeTextChange={setPassengerHomeText}
             />
+
+          <DepartureTimePicker
+            value={departureTime}
+            onChange={(value) => {
+              setDepartureTime(value);
+              clearCandidates();
+            }}
+          />
 
           <SegmentedControl<TravelMode>
             options={[

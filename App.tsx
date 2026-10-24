@@ -2,15 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
-import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
+import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
+import { SegmentedControl } from './src/components/SegmentedControl';
+import { DepartureTimePicker } from './src/components/DepartureTimePicker';
 import { CandidateList } from './src/components/CandidateList';
 import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
 import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
-import { Coordinates, CandidatePoint } from './src/models';
+import { Coordinates, CandidatePoint, TravelMode, TripDirection } from './src/models';
 import { CONFIG } from './src/constants/config';
 import { showAlert } from './src/utils/alert';
+import { meetingPointTerm } from './src/utils/transitText';
 
 function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
   useEffect(() => {
@@ -44,6 +47,12 @@ export default function App() {
   const [driverDestinationText, setDriverDestinationText] = useState<string>('');
   const [passengerHomeText, setPassengerHomeText] = useState<string>('');
   const [maxWalkingDistance, setMaxWalkingDistance] = useState<number>(CONFIG.DEFAULT_WALKING_DISTANCE);
+  const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
+  const [tripDirection, setTripDirection] = useState<TripDirection>('DROP_OFF');
+  const [maxDetourMinutes, setMaxDetourMinutes] = useState<number>(CONFIG.DEFAULT_MAX_DETOUR_MINUTES);
+  const [departureTime, setDepartureTime] = useState<Date | null>(null); // null = leave now
+  // "Drop-off Location" / "Pick-up Location" in bus mode, "Drop/Pick Location" when walking
+  const formPlace = meetingPointTerm(travelMode === 'BUS' ? tripDirection : undefined);
   const [selectedCandidate, setSelectedCandidate] = useState<CandidatePoint | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showCandidatesModal, setShowCandidatesModal] = useState(false);
@@ -83,13 +92,21 @@ export default function App() {
       showAlert('Missing Information', 'Please enter all three locations');
       return;
     }
+    if (departureTime && departureTime.getTime() <= Date.now()) {
+      showAlert('Departure time passed', 'Pick a later time, or choose "Leave now".');
+      return;
+    }
     setShowValidationErrors(false);
 
     await runOptimization({
       start: driverStart,
       end: driverDestination,
       passengerHome,
+      mode: travelMode,
       maxWalkingDistance,
+      direction: tripDirection,
+      maxDetourMinutes,
+      departureTime,
     });
   };
 
@@ -394,7 +411,7 @@ export default function App() {
           
           <View style={styles.journeyMessageCard}>
             <Text style={styles.journeyBody}>
-              🗺️ You're en route to the drop/pick location.
+              🗺️ You're en route to the {meetingPointTerm(journey?.selectedDropoff?.direction).toLowerCase()}.
             </Text>
             <Text style={styles.journeyBody}>
               ✅ When you arrive, press the button below to navigate to your final destination.
@@ -641,10 +658,51 @@ export default function App() {
               onPassengerHomeTextChange={setPassengerHomeText}
             />
 
-          <MaxWalkingSlider
-            value={maxWalkingDistance}
-            onValueChange={(value) => setMaxWalkingDistance(value)}
+          <DepartureTimePicker
+            value={departureTime}
+            onChange={(value) => {
+              setDepartureTime(value);
+              clearCandidates();
+            }}
           />
+
+          <SegmentedControl<TravelMode>
+            options={[
+              { value: 'WALK', label: '🚶 Walk' },
+              { value: 'BUS', label: '🚌 Bus' },
+            ]}
+            value={travelMode}
+            onChange={(mode) => {
+              setTravelMode(mode);
+              clearCandidates();
+            }}
+          />
+
+          {travelMode === 'BUS' && (
+            <SegmentedControl<TripDirection>
+              options={[
+                { value: 'DROP_OFF', label: 'Drop-off' },
+                { value: 'PICK_UP', label: 'Pick-up' },
+              ]}
+              value={tripDirection}
+              onChange={(direction) => {
+                setTripDirection(direction);
+                clearCandidates();
+              }}
+            />
+          )}
+
+          {travelMode === 'WALK' ? (
+            <MaxWalkingSlider
+              value={maxWalkingDistance}
+              onValueChange={(value) => setMaxWalkingDistance(value)}
+            />
+          ) : (
+            <MaxDetourSlider
+              value={maxDetourMinutes}
+              onValueChange={(value) => setMaxDetourMinutes(value)}
+            />
+          )}
 
             <TouchableOpacity
               style={[styles.formButton, loading && styles.formButtonDisabled]}
@@ -653,11 +711,11 @@ export default function App() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <SearchingIndicator />
+                <SearchingIndicator mode={travelMode} />
               ) : (
                 <View style={styles.formButtonContent}>
                   <Text style={styles.formButtonIcon}>🔍</Text>
-                  <Text style={styles.formButtonText} numberOfLines={1}>Find Drop/Pick Location</Text>
+                  <Text style={styles.formButtonText} numberOfLines={1}>Find {formPlace}</Text>
                 </View>
               )}
               <View style={styles.formButtonShadow} />
@@ -690,7 +748,7 @@ export default function App() {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderText}>
-                <Text style={styles.modalTitle}>Select Drop/Pick Location</Text>
+                <Text style={styles.modalTitle}>Select {formPlace}</Text>
                 <Text style={styles.modalSubtitle}>{candidates.length} options found</Text>
                 {searchSummary && (
                   <Text style={styles.searchSummary}>{searchSummary}</Text>

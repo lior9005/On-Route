@@ -29,6 +29,34 @@ interface RoutesApiLeg {
   endLocation?: { latLng?: { latitude: number; longitude: number } };
 }
 
+/** Routes API TRANSIT route (fields from the computeTransitRoutes field mask) */
+export interface RoutesApiTransitRoute {
+  duration?: string;
+  legs?: Array<{
+    steps?: Array<{
+      travelMode?: "WALK" | "TRANSIT" | string;
+      distanceMeters?: number;
+      staticDuration?: string;
+      polyline?: { encodedPolyline: string };
+      transitDetails?: {
+        stopDetails?: {
+          departureStop?: { name?: string };
+          arrivalStop?: { name?: string };
+          departureTime?: string;
+          arrivalTime?: string;
+        };
+        headsign?: string;
+        stopCount?: number;
+        transitLine?: {
+          name?: string;
+          nameShort?: string;
+          vehicle?: { type?: string };
+        };
+      };
+    }>;
+  }>;
+}
+
 interface RoutesApiRoute {
   duration?: string;
   distanceMeters?: number;
@@ -43,6 +71,7 @@ export class GoogleMapsService {
   private routeMatrixUrl =
     "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
   private placesUrl = "https://places.googleapis.com/v1/places:searchNearby";
+  private placesTextSearchUrl = "https://places.googleapis.com/v1/places:searchText";
 
   constructor(apiKey: string) {
     // Application Security Requirement: API key passed as parameter (from environment), parameterized queries for all API calls
@@ -55,6 +84,7 @@ export class GoogleMapsService {
   async fetchBaselineRoute(
     start: Coordinates,
     end: Coordinates,
+    departureTime?: Date | null,
   ): Promise<BaselineRoute> {
     const route = await this.computeRoute(
       start,
@@ -63,6 +93,7 @@ export class GoogleMapsService {
       "DRIVE",
       "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
       "Failed to fetch baseline route",
+      departureTime,
     );
 
     return {
@@ -113,35 +144,100 @@ export class GoogleMapsService {
   }
 
   /**
-   * Search for places along a route polyline
+   * Bus stops along a route (Places API (New) Text Search along a route).
+   * Google orders them by the detour they add to the route.
    */
-  async searchAlongRoute(
-    polyline: string,
-    placeType: string,
+  async searchBusStopsAlongRoute(
+    encodedPolyline: string,
+    pages: number,
   ): Promise<PlaceResult[]> {
-    // Decode polyline and sample points
-    const points = this.decodePolyline(polyline);
-    const sampledPoints = this.samplePoints(
-      points,
-      CONFIG.SAMPLE_INTERVAL || 5,
-    );
-
     const results: PlaceResult[] = [];
     const seenIds = new Set<string>();
+    let pageToken: string | undefined;
 
-    // Search near each sampled point
-    for (const point of sampledPoints) {
-      const nearby = await this.nearbySearch(point, [placeType], 100);
-
-      for (const place of nearby) {
-        if (!seenIds.has(place.id)) {
-          seenIds.add(place.id);
-          results.push(place);
-        }
+    for (let page = 0; page < pages; page++) {
+      let data: any;
+      try {
+        data = await this.textSearchAlongRoute(encodedPolyline, "bus_stop", pageToken);
+      } catch (err) {
+        // Fall back to the broader transit_station type if bus_stop is rejected
+        if (page > 0) break;
+        data = await this.textSearchAlongRoute(encodedPolyline, "transit_station");
       }
+
+      for (const place of data.places ?? []) {
+        if (seenIds.has(place.id)) continue;
+        seenIds.add(place.id);
+        results.push({
+          id: place.id,
+          location: {
+            lat: place.location.latitude,
+            lon: place.location.longitude,
+          },
+          name: place.displayName?.text || "Bus stop",
+        });
+      }
+
+      pageToken = data.nextPageToken;
+      if (!pageToken) break;
     }
 
     return results;
+  }
+
+  /**
+   * Bus trips from `origin` to `destination` (Routes API, TRANSIT), leaving
+   * after `departureTime` or arriving before `arrivalTime`. Returns Google's
+   * alternatives as-is; an empty list means no transit route.
+   */
+  async computeTransitRoutes(
+    origin: Coordinates,
+    destination: Coordinates,
+    time: { departureTime: Date } | { arrivalTime: Date },
+  ): Promise<RoutesApiTransitRoute[]> {
+    const toWaypoint = (c: Coordinates) => ({
+      location: { latLng: { latitude: c.lat, longitude: c.lon } },
+    });
+
+    const response = await fetch(this.routesUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask": [
+          "routes.duration",
+          "routes.legs.steps.travelMode",
+          "routes.legs.steps.distanceMeters",
+          "routes.legs.steps.staticDuration",
+          "routes.legs.steps.polyline.encodedPolyline",
+          "routes.legs.steps.transitDetails",
+        ].join(","),
+      },
+      body: JSON.stringify({
+        origin: toWaypoint(origin),
+        destination: toWaypoint(destination),
+        travelMode: "TRANSIT",
+        computeAlternativeRoutes: true,
+        languageCode: "en", // Otherwise stop names may come back in Hebrew or Arabic
+        transitPreferences: {
+          allowedTravelModes: CONFIG.TRANSIT_MODES,
+          routingPreference: "FEWER_TRANSFERS",
+        },
+        ...("departureTime" in time
+          ? { departureTime: time.departureTime.toISOString() }
+          : { arrivalTime: time.arrivalTime.toISOString() }),
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to compute bus routes: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
+
+    // An empty object is returned when there is no transit route
+    return data.routes ?? [];
   }
 
   /**
@@ -153,8 +249,13 @@ export class GoogleMapsService {
     end: Coordinates,
     passengerHome: Coordinates,
   ): Promise<any> {
+    // Bus trips already carry their map lines (bus + walking parts)
+    const transitSegments = candidate.passengerLeg?.transit?.segments as
+      | Array<{ kind: "WALK" | "BUS"; polyline: string }>
+      | undefined;
+
     // Fetch the detour route with per-leg polylines (with real-time traffic)
-    // and the walking route from meeting point to passenger home in parallel
+    // and, for walking candidates, the walking route to the passenger in parallel
     const [detourRoute, walkingRoute] = await Promise.all([
       this.computeRoute(
         start,
@@ -164,14 +265,16 @@ export class GoogleMapsService {
         "routes.legs.polyline.encodedPolyline",
         "Failed to fetch route visualization",
       ),
-      this.computeRoute(
-        candidate.coordinates,
-        passengerHome,
-        [],
-        "WALK",
-        "routes.polyline.encodedPolyline",
-        "Failed to fetch walking route",
-      ),
+      transitSegments
+        ? Promise.resolve(null)
+        : this.computeRoute(
+            candidate.coordinates,
+            passengerHome,
+            [],
+            "WALK",
+            "routes.polyline.encodedPolyline",
+            "Failed to fetch walking route",
+          ),
     ]);
 
     const legs = detourRoute.legs ?? [];
@@ -192,11 +295,27 @@ export class GoogleMapsService {
         color: "#34A853", // Green - meeting point to destination
         label: "Driver to Destination",
       },
-      {
-        polyline: walkingRoute.polyline?.encodedPolyline ?? "",
-        color: "#FBBC04", // Orange - passenger walking
-        label: "Passenger Walking",
-      },
+      ...(transitSegments
+        ? transitSegments.map((segment) =>
+            segment.kind === "BUS"
+              ? {
+                  polyline: segment.polyline,
+                  color: "#8E24AA", // Purple - passenger bus
+                  label: "Passenger Bus",
+                }
+              : {
+                  polyline: segment.polyline,
+                  color: "#FBBC04", // Orange - passenger walking
+                  label: "Passenger Walking",
+                },
+          )
+        : [
+            {
+              polyline: walkingRoute?.polyline?.encodedPolyline ?? "",
+              color: "#FBBC04", // Orange - passenger walking
+              label: "Passenger Walking",
+            },
+          ]),
     ];
 
     // Calculate bounds
@@ -226,6 +345,7 @@ export class GoogleMapsService {
     start: Coordinates,
     dropoff: Coordinates,
     end: Coordinates,
+    departureTime?: Date | null,
   ): Promise<DetourRoute> {
     const route = await this.computeRoute(
       start,
@@ -234,6 +354,7 @@ export class GoogleMapsService {
       "DRIVE",
       "routes.legs.duration,routes.legs.distanceMeters,routes.legs.endLocation",
       "Failed to compute detour route",
+      departureTime,
     );
 
     const legs = route.legs ?? [];
@@ -317,6 +438,7 @@ export class GoogleMapsService {
     travelMode: TravelMode,
     fieldMask: string,
     errorMessage: string,
+    departureTime?: Date | null,
   ): Promise<RoutesApiRoute> {
     const toWaypoint = (c: Coordinates) => ({
       location: { latLng: { latitude: c.lat, longitude: c.lon } },
@@ -336,6 +458,10 @@ export class GoogleMapsService {
     // routing preference is only allowed for driving
     if (travelMode === "DRIVE") {
       body.routingPreference = "TRAFFIC_AWARE";
+      // Planned rides: predicted traffic at that time (must be in the future)
+      if (departureTime && departureTime.getTime() > Date.now() + 60_000) {
+        body.departureTime = departureTime.toISOString();
+      }
     }
 
     const response = await fetch(this.routesUrl, {
@@ -367,6 +493,42 @@ export class GoogleMapsService {
    */
   private parseDuration(duration?: string): number {
     return duration ? parseFloat(duration) : 0;
+  }
+
+  /**
+   * One page of Places API (New) Text Search along a route
+   */
+  private async textSearchAlongRoute(
+    encodedPolyline: string,
+    includedType: string,
+    pageToken?: string,
+  ): Promise<any> {
+    const response = await fetch(this.placesTextSearchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": this.apiKey,
+        "X-Goog-FieldMask":
+          "places.id,places.location,places.displayName,nextPageToken",
+      },
+      body: JSON.stringify({
+        textQuery: "bus stop",
+        languageCode: "en",
+        includedType,
+        strictTypeFiltering: true,
+        pageSize: 20,
+        searchAlongRouteParameters: { polyline: { encodedPolyline } },
+        ...(pageToken ? { pageToken } : {}),
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        `Bus stop search failed: ${data?.error?.status ?? response.status} ${data?.error?.message ?? ""}`.trim(),
+      );
+    }
+    return data;
   }
 
   /**
@@ -412,62 +574,5 @@ export class GoogleMapsService {
       },
       name: place.displayName?.text || "Unknown",
     }));
-  }
-
-  /**
-   * Decode Google polyline format
-   */
-  private decodePolyline(encoded: string): Coordinates[] {
-    const points: Coordinates[] = [];
-    let index = 0;
-    let lat = 0;
-    let lon = 0;
-
-    while (index < encoded.length) {
-      let b;
-      let shift = 0;
-      let result = 0;
-
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-
-      const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-      lat += dlat;
-
-      shift = 0;
-      result = 0;
-
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-
-      const dlon = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-      lon += dlon;
-
-      points.push({
-        lat: lat / 1e5,
-        lon: lon / 1e5,
-      });
-    }
-
-    return points;
-  }
-
-  /**
-   * Sample points from array at regular intervals
-   */
-  private samplePoints(points: Coordinates[], interval: number): Coordinates[] {
-    const sampled: Coordinates[] = [];
-
-    for (let i = 0; i < points.length; i += interval) {
-      sampled.push(points[i]);
-    }
-
-    return sampled;
   }
 }

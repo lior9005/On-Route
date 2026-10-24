@@ -4,6 +4,7 @@ import MapView, { Polyline, Marker } from 'react-native-maps';
 import { CandidatePoint, Coordinates, RouteVisualization } from '../models';
 import { decodePolyline } from '../utils/polylineDecoder';
 import { CONFIG } from '../constants/config';
+import { meetingPointTerm } from '../utils/transitText';
 
 export interface RouteMapProps {
   visualization: RouteVisualization;
@@ -65,7 +66,7 @@ export function RouteMap({
       />
       <Marker
         coordinate={{ latitude: candidate.coordinates.lat, longitude: candidate.coordinates.lon }}
-        title={`🤝 ${candidate.name || 'Drop/Pick Location'}`}
+        title={`🤝 ${candidate.name || meetingPointTerm(candidate.direction)}`}
         description="Pick/drop passenger here"
         pinColor="#E91E63"
       />

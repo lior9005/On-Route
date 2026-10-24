@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { CandidatePoint } from '../models';
 import { secondsToMinutes, metersToKilometers } from '../utils/distance';
+import { describeBusTrip, meetingPointTerm } from '../utils/transitText';
 
 interface CandidateListProps {
   candidates: CandidatePoint[];
@@ -13,6 +14,10 @@ interface CandidateListProps {
  * Display name with an icon for the meeting point type
  */
 export function meetingPointLabel(candidate: CandidatePoint): string {
+  if (candidate.passengerLeg.mode === 'TRANSIT') {
+    // The car stops near the bus stop, not in it
+    return `🚏 Near ${candidate.name || 'bus stop'}`;
+  }
   if (candidate.kind === 'STREET') {
     return `🏘️ ${candidate.name || 'Side street'}`;
   }
@@ -30,6 +35,8 @@ function CandidateItem({
   isShortestWalk: boolean;
   onSelect: () => void;
 }) {
+  const busTrip = describeBusTrip(item);
+  const place = meetingPointTerm(item.direction);
   return (
     <TouchableOpacity
       style={[
@@ -41,36 +48,52 @@ function CandidateItem({
     >
       {isShortestWalk && (
         <View style={styles.shortestWalkBadge}>
-          <Text style={styles.shortestWalkBadgeText}>🚶 Shortest walk</Text>
+          <Text style={styles.shortestWalkBadgeText}>
+            {busTrip ? '🚌 Fastest for passenger' : '🚶 Shortest walk'}
+          </Text>
         </View>
       )}
       <Text style={styles.name}>{meetingPointLabel(item)}</Text>
       {item.extraDriveTime !== undefined && (
         <Text style={styles.extraTime}>
           +{secondsToMinutes(item.extraDriveTime)} min vs. your normal route
+          {item.driverWaitSeconds ? ` · ⏳ driver waits ${secondsToMinutes(item.driverWaitSeconds)} min` : ''}
         </Text>
       )}
       <View style={styles.routeInfo}>
-        <Text style={styles.routeLabel}>🚗 Your Location → Drop/Pick Location</Text>
+        <Text style={styles.routeLabel}>🚗 Driver Starting Location → {place}</Text>
         <Text style={styles.routeValue}>
           {secondsToMinutes(item.leg1.duration)} min ({metersToKilometers(item.leg1.distance).toFixed(1)} km)
         </Text>
       </View>
       <View style={styles.routeInfo}>
-        <Text style={styles.routeLabel}>🚗 Drop/Pick Location → Destination</Text>
+        <Text style={styles.routeLabel}>🚗 {place} → Destination</Text>
         <Text style={styles.routeValue}>
           {secondsToMinutes(item.leg2.duration)} min ({metersToKilometers(item.leg2.distance).toFixed(1)} km)
         </Text>
       </View>
-      <View style={styles.routeInfo}>
-        <Text style={styles.routeLabel}>🚶 Passenger Walk</Text>
-        <Text style={styles.routeValue}>
-          {secondsToMinutes(item.passengerLeg.duration)} min ({metersToKilometers(item.passengerLeg.distance).toFixed(1)} km)
-        </Text>
-      </View>
+      {busTrip ? (
+        <View style={styles.routeInfo}>
+          <Text style={styles.routeLabel}>{busTrip.title}</Text>
+          {busTrip.lines.map((line) => (
+            <Text key={line} style={styles.routeValue}>{line}</Text>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.routeInfo}>
+          <Text style={styles.routeLabel}>🚶 Passenger Walk</Text>
+          <Text style={styles.routeValue}>
+            {secondsToMinutes(item.passengerLeg.duration)} min ({metersToKilometers(item.passengerLeg.distance).toFixed(1)} km)
+          </Text>
+        </View>
+      )}
       <View style={styles.totalInfo}>
-        <Text style={styles.totalLabel}>Total Driving:</Text>
-        <Text style={styles.totalValue}>{secondsToMinutes(item.totalDetour)} min</Text>
+        <Text style={styles.totalLabel}>
+          {busTrip ? 'Driver extra time + bus trip:' : 'Total Driving:'}
+        </Text>
+        <Text style={styles.totalValue}>
+          {secondsToMinutes(busTrip ? item.combinedTime ?? 0 : item.totalDetour)} min
+        </Text>
       </View>
     </TouchableOpacity>
   );

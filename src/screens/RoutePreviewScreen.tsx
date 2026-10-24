@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Dimensions, Share, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Dimensions, Share, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { CandidatePoint, Coordinates } from '../models';
 import { RouteMap } from '../components/RouteMap';
 import { meetingPointLabel } from '../components/CandidateList';
@@ -29,6 +29,7 @@ export function RoutePreviewScreen({
 }: RoutePreviewScreenProps) {
   const { visualization, loading, error, fetchVisualization } = useRouteVisualization();
   const busTrip = describeBusTrip(candidate);
+  const { height: windowHeight } = useWindowDimensions();
   const place = meetingPointTerm(candidate.direction);
   const [showTransferInstructions, setShowTransferInstructions] = useState(false);
   
@@ -278,7 +279,11 @@ export function RoutePreviewScreen({
       />
 
       {/* Route Summary Card */}
-      <View style={styles.summaryCard}>
+      {/* At most half the screen, so the map stays visible; long bus summaries scroll */}
+      <ScrollView
+        style={[styles.summaryCard, { maxHeight: windowHeight * 0.5 }]}
+        contentContainerStyle={styles.summaryContent}
+      >
         <View style={styles.summaryHeader}>
           <Text style={styles.summaryTitle}>Route Summary</Text>
           <TouchableOpacity 
@@ -332,7 +337,7 @@ export function RoutePreviewScreen({
           <Text style={styles.totalLabel}>Total Driving Time:</Text>
           <Text style={styles.totalValue}>{secondsToMinutes(candidate.totalDetour)} min</Text>
         </View>
-      </View>
+      </ScrollView>
 
       {/* Action Buttons */}
       <View style={styles.actions}>
@@ -361,9 +366,12 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     backgroundColor: '#fff',
-    padding: 16,
+    flexGrow: 0,
     borderTopWidth: 1,
     borderTopColor: '#eee',
+  },
+  summaryContent: {
+    padding: 16,
   },
   summaryHeader: {
     flexDirection: 'row',

@@ -241,6 +241,9 @@ export function DestinationInput({
                     isNewPlacesAPI={true}
                     requestUrl={PLACES_REQUEST_URL}
                     fields={PLACE_DETAILS_FIELDS}
+                    // Inside the form's ScrollView: no nested scrolling, taps work with the keyboard open
+                    disableScroll={true}
+                    keyboardShouldPersistTaps="handled"
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidDriverStart && styles.autocompleteInputInvalid],
@@ -288,6 +291,9 @@ export function DestinationInput({
                     isNewPlacesAPI={true}
                     requestUrl={PLACES_REQUEST_URL}
                     fields={PLACE_DETAILS_FIELDS}
+                    // Inside the form's ScrollView: no nested scrolling, taps work with the keyboard open
+                    disableScroll={true}
+                    keyboardShouldPersistTaps="handled"
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidDriverDestination && styles.autocompleteInputInvalid],
@@ -335,6 +341,9 @@ export function DestinationInput({
                     isNewPlacesAPI={true}
                     requestUrl={PLACES_REQUEST_URL}
                     fields={PLACE_DETAILS_FIELDS}
+                    // Inside the form's ScrollView: no nested scrolling, taps work with the keyboard open
+                    disableScroll={true}
+                    keyboardShouldPersistTaps="handled"
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidPassengerHome && styles.autocompleteInputInvalid],

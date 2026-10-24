@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
@@ -619,6 +619,15 @@ export default function App() {
       />
 
       <SafeAreaView style={styles.formSafeArea}>
+        <KeyboardAvoidingView
+          style={styles.formSafeArea}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+        <ScrollView
+          contentContainerStyle={styles.formScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <Animated.View 
           style={[
             styles.formContent,
@@ -735,6 +744,8 @@ export default function App() {
             )}
           </View>
         </Animated.View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
 
       <StatusBar style="auto" />
@@ -821,8 +832,11 @@ const styles = StyleSheet.create({
   formSafeArea: {
     flex: 1,
   },
+  formScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
   formContent: {
-    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 80,
     marginTop: 0,

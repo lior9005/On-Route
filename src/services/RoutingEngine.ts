@@ -384,6 +384,7 @@ export class RoutingEngine {
           kind: "BUS_STOP",
           extraDriveTime,
           driverWaitSeconds: evaluation.driverWaitSeconds,
+          direction,
           meetTime: evaluation.meetTime.toISOString(),
           combinedTime:
             extraDriveTime + evaluation.driverWaitSeconds + evaluation.leg.duration,

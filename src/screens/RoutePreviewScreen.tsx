@@ -4,7 +4,7 @@ import { CandidatePoint, Coordinates } from '../models';
 import { RouteMap } from '../components/RouteMap';
 import { meetingPointLabel } from '../components/CandidateList';
 import { RouteLoading } from '../components/RouteLoading';
-import { describeBusTrip } from '../utils/transitText';
+import { describeBusTrip, meetingPointTerm } from '../utils/transitText';
 import { useRouteVisualization } from '../hooks/useRouteVisualization';
 import { WazeService } from '../services/WazeService';
 import { showAlert } from '../utils/alert';
@@ -29,6 +29,7 @@ export function RoutePreviewScreen({
 }: RoutePreviewScreenProps) {
   const { visualization, loading, error, fetchVisualization } = useRouteVisualization();
   const busTrip = describeBusTrip(candidate);
+  const place = meetingPointTerm(candidate.direction);
   const [showTransferInstructions, setShowTransferInstructions] = useState(false);
   
   // Animation values for the Waze screen
@@ -116,7 +117,7 @@ export function RoutePreviewScreen({
   const handleShareLocation = async () => {
     try {
       const locationUrl = `https://www.google.com/maps/search/?api=1&query=${candidate.coordinates.lat},${candidate.coordinates.lon}`;
-      const message = `📍 Meeting Point: ${candidate.name || 'Drop/Pick Location'}\n\nLocation: ${locationUrl}`;
+      const message = `📍 ${place}: ${candidate.name || place}\n\nLocation: ${locationUrl}`;
       
       // Web: use the Web Share API when available, otherwise copy to clipboard
       if (Platform.OS === 'web' && !(navigator as any).share) {
@@ -224,7 +225,7 @@ export function RoutePreviewScreen({
           
           <View style={styles.messageCard}>
             <Text style={styles.transferBody}>
-              🗺️ You'll be transferred to Waze for navigation to the drop/pick location.
+              🗺️ You'll be transferred to Waze for navigation to the {place.toLowerCase()}.
             </Text>
             <Text style={styles.transferBody}>
               ✅ When you arrive, return to this app and tap "Navigate to Driver Destination" to continue.
@@ -289,18 +290,18 @@ export function RoutePreviewScreen({
           </TouchableOpacity>
         </View>
         <Text style={styles.dropoffName}>
-          Drop/Pick Location: {meetingPointLabel(candidate)}
+          {place}: {meetingPointLabel(candidate)}
         </Text>
         
         <View style={styles.routeSegment}>
-          <Text style={styles.segmentLabel}>🚗 Your Location → Drop/Pick Location</Text>
+          <Text style={styles.segmentLabel}>🚗 Driver Starting Location → {place}</Text>
           <Text style={styles.segmentDetails}>
             {secondsToMinutes(candidate.leg1.duration)} min • {metersToKilometers(candidate.leg1.distance).toFixed(1)} km
           </Text>
         </View>
         
         <View style={styles.routeSegment}>
-          <Text style={styles.segmentLabel}>🚗 Drop/Pick Location → Destination</Text>
+          <Text style={styles.segmentLabel}>🚗 {place} → Destination</Text>
           <Text style={styles.segmentDetails}>
             {secondsToMinutes(candidate.leg2.duration)} min • {metersToKilometers(candidate.leg2.distance).toFixed(1)} km
           </Text>
@@ -308,10 +309,8 @@ export function RoutePreviewScreen({
         
         {busTrip ? (
           <View style={styles.routeSegment}>
-            <Text style={styles.segmentLabel}>
-              🚌 Passenger Bus · {secondsToMinutes(candidate.passengerLeg.duration)} min trip
-            </Text>
-            {busTrip.map((line) => (
+            <Text style={styles.segmentLabel}>{busTrip.title}</Text>
+            {busTrip.lines.map((line) => (
               <Text key={line} style={styles.segmentDetails}>{line}</Text>
             ))}
             {!!candidate.driverWaitSeconds && (

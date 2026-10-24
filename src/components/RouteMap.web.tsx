@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import type { RouteMapProps } from './RouteMap';
 import { decodePolyline } from '../utils/polylineDecoder';
 import { CONFIG } from '../constants/config';
+import { meetingPointTerm } from '../utils/transitText';
 
 declare global {
   interface Window {
@@ -105,7 +106,7 @@ export function RouteMap({
           { coord: startPoint, title: '🚗 Your Starting Point', color: '#4285F4' },
           {
             coord: candidate.coordinates,
-            title: `🤝 ${candidate.name || 'Drop/Pick Location'}`,
+            title: `🤝 ${candidate.name || meetingPointTerm(candidate.direction)}`,
             color: '#E91E63',
           },
           { coord: endPoint, title: '🎯 Your Destination', color: '#34A853' },

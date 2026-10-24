@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { CandidatePoint } from '../models';
 import { secondsToMinutes, metersToKilometers } from '../utils/distance';
-import { describeBusTrip } from '../utils/transitText';
+import { describeBusTrip, meetingPointTerm } from '../utils/transitText';
 
 interface CandidateListProps {
   candidates: CandidatePoint[];
@@ -36,6 +36,7 @@ function CandidateItem({
   onSelect: () => void;
 }) {
   const busTrip = describeBusTrip(item);
+  const place = meetingPointTerm(item.direction);
   return (
     <TouchableOpacity
       style={[
@@ -60,23 +61,21 @@ function CandidateItem({
         </Text>
       )}
       <View style={styles.routeInfo}>
-        <Text style={styles.routeLabel}>🚗 Your Location → Drop/Pick Location</Text>
+        <Text style={styles.routeLabel}>🚗 Driver Starting Location → {place}</Text>
         <Text style={styles.routeValue}>
           {secondsToMinutes(item.leg1.duration)} min ({metersToKilometers(item.leg1.distance).toFixed(1)} km)
         </Text>
       </View>
       <View style={styles.routeInfo}>
-        <Text style={styles.routeLabel}>🚗 Drop/Pick Location → Destination</Text>
+        <Text style={styles.routeLabel}>🚗 {place} → Destination</Text>
         <Text style={styles.routeValue}>
           {secondsToMinutes(item.leg2.duration)} min ({metersToKilometers(item.leg2.distance).toFixed(1)} km)
         </Text>
       </View>
       {busTrip ? (
         <View style={styles.routeInfo}>
-          <Text style={styles.routeLabel}>
-            🚌 Passenger Bus · {secondsToMinutes(item.passengerLeg.duration)} min trip
-          </Text>
-          {busTrip.map((line) => (
+          <Text style={styles.routeLabel}>{busTrip.title}</Text>
+          {busTrip.lines.map((line) => (
             <Text key={line} style={styles.routeValue}>{line}</Text>
           ))}
         </View>

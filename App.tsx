@@ -13,6 +13,7 @@ import { useOptimization } from './src/hooks/useOptimization';
 import { Coordinates, CandidatePoint, TravelMode, TripDirection } from './src/models';
 import { CONFIG } from './src/constants/config';
 import { showAlert } from './src/utils/alert';
+import { meetingPointTerm } from './src/utils/transitText';
 
 function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
   useEffect(() => {
@@ -50,6 +51,8 @@ export default function App() {
   const [tripDirection, setTripDirection] = useState<TripDirection>('DROP_OFF');
   const [maxDetourMinutes, setMaxDetourMinutes] = useState<number>(CONFIG.DEFAULT_MAX_DETOUR_MINUTES);
   const [departureTime, setDepartureTime] = useState<Date | null>(null); // null = leave now
+  // "Drop-off Location" / "Pick-up Location" in bus mode, "Drop/Pick Location" when walking
+  const formPlace = meetingPointTerm(travelMode === 'BUS' ? tripDirection : undefined);
   const [selectedCandidate, setSelectedCandidate] = useState<CandidatePoint | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showCandidatesModal, setShowCandidatesModal] = useState(false);
@@ -408,7 +411,7 @@ export default function App() {
           
           <View style={styles.journeyMessageCard}>
             <Text style={styles.journeyBody}>
-              🗺️ You're en route to the drop/pick location.
+              🗺️ You're en route to the {meetingPointTerm(journey?.selectedDropoff?.direction).toLowerCase()}.
             </Text>
             <Text style={styles.journeyBody}>
               ✅ When you arrive, press the button below to navigate to your final destination.
@@ -712,7 +715,7 @@ export default function App() {
               ) : (
                 <View style={styles.formButtonContent}>
                   <Text style={styles.formButtonIcon}>🔍</Text>
-                  <Text style={styles.formButtonText} numberOfLines={1}>Find Drop/Pick Location</Text>
+                  <Text style={styles.formButtonText} numberOfLines={1}>Find {formPlace}</Text>
                 </View>
               )}
               <View style={styles.formButtonShadow} />
@@ -745,7 +748,7 @@ export default function App() {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderText}>
-                <Text style={styles.modalTitle}>Select Drop/Pick Location</Text>
+                <Text style={styles.modalTitle}>Select {formPlace}</Text>
                 <Text style={styles.modalSubtitle}>{candidates.length} options found</Text>
                 {searchSummary && (
                   <Text style={styles.searchSummary}>{searchSummary}</Text>

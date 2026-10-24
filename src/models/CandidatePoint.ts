@@ -90,6 +90,7 @@ export interface CandidatePoint {
   kind?: MeetingPointKind;
   extraDriveTime?: number; // seconds added vs. the driver's normal route
   meetTime?: string; // ISO meeting time at the meeting point (bus mode)
+  direction?: TripDirection; // Bus mode: drop-off or pick-up
   driverWaitSeconds?: number; // Bus pick-up: driver waits for the hitchhiker
   combinedTime?: number; // Bus mode ranking: extraDriveTime + passenger trip (seconds)
 }

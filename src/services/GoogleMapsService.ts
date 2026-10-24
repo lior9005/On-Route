@@ -216,6 +216,7 @@ export class GoogleMapsService {
         destination: toWaypoint(destination),
         travelMode: "TRANSIT",
         computeAlternativeRoutes: true,
+        languageCode: "en", // Otherwise stop names may come back in Hebrew or Arabic
         transitPreferences: {
           allowedTravelModes: CONFIG.TRANSIT_MODES,
           routingPreference: "FEWER_TRANSFERS",
@@ -503,6 +504,7 @@ export class GoogleMapsService {
       },
       body: JSON.stringify({
         textQuery: "bus stop",
+        languageCode: "en",
         includedType,
         strictTypeFiltering: true,
         pageSize: 20,

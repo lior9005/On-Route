@@ -1,16 +1,20 @@
 import { useState, useCallback } from "react";
-import { CandidatePoint, Coordinates } from "../models";
+import { CandidatePoint, Coordinates, TravelMode, TripDirection } from "../models";
 import { GoogleMapsService } from "../services/GoogleMapsService";
 import { OsmService } from "../services/OsmService";
 import { RoutingEngine, describeSearch } from "../services/RoutingEngine";
 import { WalkingStrategy } from "../strategies/WalkingStrategy";
+import { TransitStrategy } from "../strategies/TransitStrategy";
 import { CONFIG } from "../constants/config";
 
 interface OptimizationParams {
   start: Coordinates;
   end: Coordinates;
   passengerHome: Coordinates;
+  mode: TravelMode;
   maxWalkingDistance: number;
+  direction: TripDirection;
+  maxDetourMinutes: number;
 }
 
 export function useOptimization() {
@@ -35,15 +39,11 @@ export function useOptimization() {
         googleMapsService,
         new OsmService(),
         strategy,
+        new TransitStrategy(googleMapsService),
       );
 
       // Run optimization
-      const results = await routingEngine.optimize(
-        params.start,
-        params.end,
-        params.passengerHome,
-        params.maxWalkingDistance,
-      );
+      const results = await routingEngine.optimize(params);
 
       setCandidates(results);
       const summary = routingEngine.lastSearchInfo
@@ -53,7 +53,9 @@ export function useOptimization() {
 
       if (results.length === 0) {
         setError(
-          "No suitable drop/pick locations found. Try increasing the maximum walking distance." +
+          (params.mode === "BUS"
+            ? "No direct bus options found. Try allowing more extra driving, or switch to walking."
+            : "No suitable drop/pick locations found. Try increasing the maximum walking distance.") +
             (summary ? `\n\n${summary}` : ""),
         );
       }

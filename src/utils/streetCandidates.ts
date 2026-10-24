@@ -133,12 +133,13 @@ export function preselectCandidates(
   end: Coordinates,
   mergeRadius: number,
   limit: number,
+  customScore?: (c: RawCandidate) => number,
 ): RawCandidate[] {
-  const score = (c: RawCandidate) =>
+  const score = customScore ?? ((c: RawCandidate) =>
     (c.isClosestOnRoute ? -Infinity : 0) +
     estimateDetour(start, c.location, end) -
     (c.onDriverRoute ? 1000 : 0) -
-    (c.isIntersection ? 20 : 0);
+    (c.isIntersection ? 20 : 0));
 
   const ranked = [...candidates].sort((a, b) => score(a) - score(b));
   const selected: RawCandidate[] = [];

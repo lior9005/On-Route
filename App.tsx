@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
-import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
+import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
+import { SegmentedControl } from './src/components/SegmentedControl';
 import { CandidateList } from './src/components/CandidateList';
 import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
 import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
-import { Coordinates, CandidatePoint } from './src/models';
+import { Coordinates, CandidatePoint, TravelMode, TripDirection } from './src/models';
 import { CONFIG } from './src/constants/config';
 import { showAlert } from './src/utils/alert';
 
@@ -44,6 +45,9 @@ export default function App() {
   const [driverDestinationText, setDriverDestinationText] = useState<string>('');
   const [passengerHomeText, setPassengerHomeText] = useState<string>('');
   const [maxWalkingDistance, setMaxWalkingDistance] = useState<number>(CONFIG.DEFAULT_WALKING_DISTANCE);
+  const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
+  const [tripDirection, setTripDirection] = useState<TripDirection>('DROP_OFF');
+  const [maxDetourMinutes, setMaxDetourMinutes] = useState<number>(CONFIG.DEFAULT_MAX_DETOUR_MINUTES);
   const [selectedCandidate, setSelectedCandidate] = useState<CandidatePoint | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showCandidatesModal, setShowCandidatesModal] = useState(false);
@@ -89,7 +93,10 @@ export default function App() {
       start: driverStart,
       end: driverDestination,
       passengerHome,
+      mode: travelMode,
       maxWalkingDistance,
+      direction: tripDirection,
+      maxDetourMinutes,
     });
   };
 
@@ -641,10 +648,43 @@ export default function App() {
               onPassengerHomeTextChange={setPassengerHomeText}
             />
 
-          <MaxWalkingSlider
-            value={maxWalkingDistance}
-            onValueChange={(value) => setMaxWalkingDistance(value)}
+          <SegmentedControl<TravelMode>
+            options={[
+              { value: 'WALK', label: '🚶 Walk' },
+              { value: 'BUS', label: '🚌 Bus' },
+            ]}
+            value={travelMode}
+            onChange={(mode) => {
+              setTravelMode(mode);
+              clearCandidates();
+            }}
           />
+
+          {travelMode === 'BUS' && (
+            <SegmentedControl<TripDirection>
+              options={[
+                { value: 'DROP_OFF', label: 'Drop-off' },
+                { value: 'PICK_UP', label: 'Pick-up' },
+              ]}
+              value={tripDirection}
+              onChange={(direction) => {
+                setTripDirection(direction);
+                clearCandidates();
+              }}
+            />
+          )}
+
+          {travelMode === 'WALK' ? (
+            <MaxWalkingSlider
+              value={maxWalkingDistance}
+              onValueChange={(value) => setMaxWalkingDistance(value)}
+            />
+          ) : (
+            <MaxDetourSlider
+              value={maxDetourMinutes}
+              onValueChange={(value) => setMaxDetourMinutes(value)}
+            />
+          )}
 
             <TouchableOpacity
               style={[styles.formButton, loading && styles.formButtonDisabled]}
@@ -653,7 +693,7 @@ export default function App() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <SearchingIndicator />
+                <SearchingIndicator mode={travelMode} />
               ) : (
                 <View style={styles.formButtonContent}>
                   <Text style={styles.formButtonIcon}>🔍</Text>

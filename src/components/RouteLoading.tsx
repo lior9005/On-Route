@@ -1,23 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Easing, LayoutChangeEvent } from 'react-native';
+import { TravelMode } from '../models';
 
-const STEPS = [
-  '🚗 Finding the fastest driving route…',
-  '🚶 Mapping the walk for your passenger…',
-  '🗺️ Drawing the map…',
-];
+const STEPS: Record<TravelMode, string[]> = {
+  WALK: [
+    '🚗 Finding the fastest driving route…',
+    '🚶 Mapping the walk for your passenger…',
+    '🗺️ Drawing the map…',
+  ],
+  BUS: [
+    '🚗 Finding the fastest driving route…',
+    '🚌 Mapping the bus for your passenger…',
+    '🗺️ Drawing the map…',
+  ],
+};
 const STEP_INTERVAL_MS = 800; // All steps show within the minimum loading time
 const CAR_SIZE = 36;
 
 interface RouteLoadingProps {
   meetingPointName: string;
+  mode?: TravelMode;
 }
 
 /**
  * Loading screen while the route preview is fetched: a car driving a
  * mini route (start → meeting point → destination) on the app's dark theme.
  */
-export function RouteLoading({ meetingPointName }: RouteLoadingProps) {
+export function RouteLoading({ meetingPointName, mode = 'WALK' }: RouteLoadingProps) {
+  const steps = STEPS[mode];
   const drive = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
@@ -49,7 +59,7 @@ export function RouteLoading({ meetingPointName }: RouteLoadingProps) {
     pulseLoop.start();
 
     const stepTimer = setInterval(
-      () => setStep((s) => Math.min(s + 1, STEPS.length - 1)),
+      () => setStep((s) => Math.min(s + 1, steps.length - 1)),
       STEP_INTERVAL_MS,
     );
 
@@ -96,9 +106,9 @@ export function RouteLoading({ meetingPointName }: RouteLoadingProps) {
           </View>
         </View>
 
-        <Text style={styles.step}>{STEPS[step]}</Text>
+        <Text style={styles.step}>{steps[step]}</Text>
         <View style={styles.progressDots}>
-          {STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <View key={i} style={[styles.dot, i <= step && styles.dotActive]} />
           ))}
         </View>

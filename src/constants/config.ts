@@ -7,7 +7,6 @@ export const CONFIG = {
   TOP_CANDIDATES_COUNT: 3,
   /** Merge meeting point candidates within this distance (meters); keep best per cluster */
   CANDIDATE_MERGE_RADIUS_METERS: 100,
-  SAMPLE_INTERVAL: 5, // Sample every Nth point from polyline
 
   // Street meeting points (OpenStreetMap road classes, OpenMapTiles schema).
   // "minor" = residential, living_street, unclassified streets
@@ -26,6 +25,20 @@ export const CONFIG = {
   DRIVE_TIME_TIE_SECONDS: 60, // Driving times this close count as equal; shorter walk wins
   GOOGLE_MAPS_API_TIMEOUT: 10000, // ms
   GOOGLE_MAPS_API_KEY, // From environment variables
+
+  // Bus option (hitchhiker takes a bus to/from the meeting point)
+  TRANSIT_MODES: ["BUS"], // Routes API transit vehicle types allowed
+  TRANSIT_MAX_TRIP_MINUTES: 40, // Hitchhiker's whole trip, waiting included
+  TRANSIT_SPARE_MINUTES: 5, // Bus leaves >= 5 min after drop-off / arrives >= 5 min before pick-up
+  TRANSIT_MAX_WALK_METERS: 800, // Walking inside the bus trip
+  PICKUP_DEPARTURE_BUFFER_SECONDS: 120, // Hitchhiker needs at least this long to leave home
+  DEFAULT_MAX_DETOUR_MINUTES: 10,
+  MIN_DETOUR_MINUTES: 2,
+  MAX_DETOUR_MINUTES: 20,
+  BUS_STOP_SEARCH_PAGES: 2, // Text Search along the route, 20 stops per page
+  // Pre-selection estimates (straight-line based, no API calls)
+  DETOUR_ESTIMATE_SPEED_MPS: 8, // ~30 km/h city driving
+  BUS_ESTIMATE_SPEED_MPS: 5, // ~18 km/h bus incl. stops
 
   // Route preview loading screen stays at least this long, so it doesn't flash
   ROUTE_PREVIEW_MIN_LOADING_MS: 2400,

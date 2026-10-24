@@ -4,6 +4,7 @@ import { CandidatePoint, Coordinates } from '../models';
 import { RouteMap } from '../components/RouteMap';
 import { meetingPointLabel } from '../components/CandidateList';
 import { RouteLoading } from '../components/RouteLoading';
+import { describeBusTrip } from '../utils/transitText';
 import { useRouteVisualization } from '../hooks/useRouteVisualization';
 import { WazeService } from '../services/WazeService';
 import { showAlert } from '../utils/alert';
@@ -27,6 +28,7 @@ export function RoutePreviewScreen({
   onBack,
 }: RoutePreviewScreenProps) {
   const { visualization, loading, error, fetchVisualization } = useRouteVisualization();
+  const busTrip = describeBusTrip(candidate);
   const [showTransferInstructions, setShowTransferInstructions] = useState(false);
   
   // Animation values for the Waze screen
@@ -134,7 +136,10 @@ export function RoutePreviewScreen({
 
   if (loading) {
     return (
-      <RouteLoading meetingPointName={meetingPointLabel(candidate)} />
+      <RouteLoading
+        meetingPointName={meetingPointLabel(candidate)}
+        mode={candidate.passengerLeg.mode === 'TRANSIT' ? 'BUS' : 'WALK'}
+      />
     );
   }
 
@@ -301,12 +306,23 @@ export function RoutePreviewScreen({
           </Text>
         </View>
         
-        <View style={styles.routeSegment}>
-          <Text style={styles.segmentLabel}>🚶 Passenger Walk</Text>
-          <Text style={styles.segmentDetails}>
-            {secondsToMinutes(candidate.passengerLeg.duration)} min • {metersToKilometers(candidate.passengerLeg.distance).toFixed(1)} km
-          </Text>
-        </View>
+        {busTrip ? (
+          <View style={styles.routeSegment}>
+            <Text style={styles.segmentLabel}>
+              🚌 Passenger Bus · {secondsToMinutes(candidate.passengerLeg.duration)} min trip
+            </Text>
+            {busTrip.map((line) => (
+              <Text key={line} style={styles.segmentDetails}>{line}</Text>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.routeSegment}>
+            <Text style={styles.segmentLabel}>🚶 Passenger Walk</Text>
+            <Text style={styles.segmentDetails}>
+              {secondsToMinutes(candidate.passengerLeg.duration)} min • {metersToKilometers(candidate.passengerLeg.distance).toFixed(1)} km
+            </Text>
+          </View>
+        )}
         
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total Driving Time:</Text>

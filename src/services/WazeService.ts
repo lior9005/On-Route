@@ -1,5 +1,6 @@
-import { Linking, Alert } from "react-native";
+import { Linking } from "react-native";
 import { Coordinates } from "../models";
+import { showAlert } from "../utils/alert";
 
 export class WazeService {
   /**
@@ -13,7 +14,7 @@ export class WazeService {
       typeof destination.lon !== "number"
     ) {
       console.error("Invalid coordinates:", destination);
-      Alert.alert("Error", "Invalid location coordinates");
+      showAlert("Error", "Invalid location coordinates");
       throw new Error("Invalid coordinates");
     }
 
@@ -27,16 +28,15 @@ export class WazeService {
       if (canOpen) {
         await Linking.openURL(url);
       } else {
-        Alert.alert(
+        showAlert(
           "Waze Not Installed",
           "Please install Waze to use navigation features.",
-          [{ text: "OK" }],
         );
         // Don't throw error - just inform user
       }
     } catch (error) {
       console.error("Error opening Waze:", error);
-      Alert.alert("Error", "Failed to open Waze navigation");
+      showAlert("Error", "Failed to open Waze navigation");
       throw error; // Re-throw so caller knows it failed
     }
   }

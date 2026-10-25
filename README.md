@@ -8,6 +8,10 @@ Expo / React Native app that finds the best drop/pick location for a driver and 
 2. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
 3. `npm start` (or `npm run web` / `npm run android` / `npm run ios`)
 
+## Password screen
+
+The app asks for a password on first open; "Remember me on this device" skips it next time. Only the password's SHA-256 is in the code (`APP_PASSWORD_SHA256` in `src/constants/config.ts`). To change it, set `EXPO_PUBLIC_APP_PASSWORD_SHA256` (e.g. in Netlify's environment variables) to the new hash, for example from `printf %s 'new-password' | sha256sum`. This is a light gate for casual visitors, not real security.
+
 ## Google Maps Platform
 
 Enable these APIs for the key in Google Cloud Console:

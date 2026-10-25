@@ -1,6 +1,12 @@
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 export const CONFIG = {
+  // Password screen: SHA-256 of the app password (only the hash is stored).
+  // Override with EXPO_PUBLIC_APP_PASSWORD_SHA256 to change it without a code change.
+  APP_PASSWORD_SHA256:
+    process.env.EXPO_PUBLIC_APP_PASSWORD_SHA256 ||
+    "b2f7d6a21d9ad46561304b2aabcff6896c5e0bc680f6c5dcfa7574759d5f388c",
+
   MAX_WALKING_DISTANCE: 2000, // meters
   MIN_WALKING_DISTANCE: 100, // meters
   DEFAULT_WALKING_DISTANCE: 500, // meters

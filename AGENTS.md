@@ -19,6 +19,12 @@ Expo (SDK 54) / React Native + TypeScript app that finds the best meeting point 
 - `src/constants/config.ts`: every tuning number (radii, limits, timeouts, road classes)
 - `App.tsx`: home screen, form and candidate modal; `src/screens/RoutePreviewScreen.tsx`: map preview
 
+## Password screen
+
+`PasswordGate` (`src/components/PasswordGate.tsx`) wraps the whole app (`App.tsx` → `MainApp`). It compares the SHA-256 of the input (`js-sha256`, pure JS, so it works on Hermes) with `CONFIG.APP_PASSWORD_SHA256`. "Remember me" stores that hash in AsyncStorage (`app-unlocked-v1`), so changing the password locks devices again. To change the password, set `EXPO_PUBLIC_APP_PASSWORD_SHA256` to the new hash (for example in Netlify) or update the default in `config.ts`. Never commit the plain password.
+
+This only keeps casual visitors out: the check runs in the client and the repo is public. Netlify's team login protection is the real access control for the website.
+
 ## Platform rules
 
 - Platform-specific files: `RouteMap.tsx` (react-native-maps, native) vs `RouteMap.web.tsx` (Google Maps JavaScript API). Metro picks `.web.tsx` for web; never import `react-native-maps` from shared code.

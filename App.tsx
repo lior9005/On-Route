@@ -5,6 +5,7 @@ import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
 import { SegmentedControl } from './src/components/SegmentedControl';
 import { DepartureTimePicker } from './src/components/DepartureTimePicker';
+import { PasswordGate } from './src/components/PasswordGate';
 import { CandidateList } from './src/components/CandidateList';
 import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
@@ -40,6 +41,14 @@ function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
 }
 
 export default function App() {
+  return (
+    <PasswordGate>
+      <MainApp />
+    </PasswordGate>
+  );
+}
+
+function MainApp() {
   const [driverStart, setDriverStart] = useState<Coordinates | null>(null);
   const [driverDestination, setDriverDestination] = useState<Coordinates | null>(null);
   const [passengerHome, setPassengerHome] = useState<Coordinates | null>(null);

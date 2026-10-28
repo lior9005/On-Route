@@ -1,5 +1,11 @@
 import { useState, useCallback } from "react";
-import { CandidatePoint, Coordinates, TravelMode, TripDirection } from "../models";
+import {
+  CandidatePoint,
+  Coordinates,
+  TravelMode,
+  TripDirection,
+  WalkingTradeoffStep,
+} from "../models";
 import { GoogleMapsService } from "../services/GoogleMapsService";
 import { OsmService } from "../services/OsmService";
 import { RoutingEngine, describeSearch } from "../services/RoutingEngine";
@@ -23,12 +29,19 @@ export function useOptimization() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchSummary, setSearchSummary] = useState<string | null>(null);
+  const [tradeoff, setTradeoff] = useState<WalkingTradeoffStep[]>([]);
+  // Walk mode: the walking limit the shown candidates were picked for
+  const [walkingLimit, setWalkingLimit] = useState<number | null>(null);
+  const [directDriveTime, setDirectDriveTime] = useState<number | null>(null);
 
   const runOptimization = useCallback(async (params: OptimizationParams) => {
     setLoading(true);
     setError(null);
     setCandidates([]);
     setSearchSummary(null);
+    setTradeoff([]);
+    setWalkingLimit(null);
+    setDirectDriveTime(null);
 
     try {
       // Initialize services
@@ -47,6 +60,9 @@ export function useOptimization() {
       const results = await routingEngine.optimize(params);
 
       setCandidates(results);
+      setTradeoff(routingEngine.lastTradeoff);
+      setWalkingLimit(routingEngine.lastWalkingLimit);
+      setDirectDriveTime(routingEngine.lastDirectDriveTime);
       const summary = routingEngine.lastSearchInfo
         ? describeSearch(routingEngine.lastSearchInfo)
         : null;
@@ -56,7 +72,7 @@ export function useOptimization() {
         setError(
           (params.mode === "BUS"
             ? "No direct bus options found. Try allowing more extra driving, or switch to walking."
-            : "No suitable drop/pick locations found. Try increasing the maximum walking distance.") +
+            : `No suitable drop/pick locations found within a ${CONFIG.WALK_SEARCH_DISTANCE}m walk.`) +
             (summary ? `\n\n${summary}` : ""),
         );
       }
@@ -71,6 +87,9 @@ export function useOptimization() {
 
   const clearCandidates = useCallback(() => {
     setCandidates([]);
+    setTradeoff([]);
+    setWalkingLimit(null);
+    setDirectDriveTime(null);
     setError(null);
   }, []);
 
@@ -79,6 +98,9 @@ export function useOptimization() {
     loading,
     error,
     searchSummary,
+    tradeoff,
+    walkingLimit,
+    directDriveTime,
     runOptimization,
     clearCandidates,
   };

@@ -94,3 +94,10 @@ export interface CandidatePoint {
   driverWaitSeconds?: number; // Bus pick-up: driver waits for the hitchhiker
   combinedTime?: number; // Bus mode ranking: extraDriveTime + passenger trip (seconds)
 }
+
+/** Best achievable driving time if the passenger may walk up to maxWalk meters */
+export interface WalkingTradeoffStep {
+  maxWalk: number; // meters
+  bestDriveTime: number | null; // seconds (A → point → C); null when nothing is within maxWalk
+  best: CandidatePoint | null; // The meeting point that gives bestDriveTime
+}

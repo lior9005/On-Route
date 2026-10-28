@@ -55,7 +55,9 @@ export function describeBusTrip(candidate: CandidatePoint): BusTripText | null {
         : ` (leaves home ${formatClock(other)} → meets driver ${formatClock(candidate.meetTime)})`;
   }
 
-  const line = transit.headsign ? `Line ${transit.lineName} → ${transit.headsign}` : `Line ${transit.lineName}`;
+  // Hebrew headsigns look like "City_Terminal"
+  const headsign = transit.headsign?.replace(/_/g, ' – ');
+  const line = headsign ? `Line ${transit.lineName} → ${headsign}` : `Line ${transit.lineName}`;
   const stops = transit.stopCount ? ` · ${transit.stopCount} stops` : '';
   const walk = transit.walkMeters > 0 ? ` · walks ${transit.walkMeters} m in total` : '';
   const busLines = [

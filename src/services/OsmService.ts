@@ -83,7 +83,8 @@ export class OsmService {
       for (let i = 0; names && i < names.length; i++) {
         const feature = names.feature(i);
         const p = feature.properties;
-        const name = String(p["name:en"] ?? p.name_en ?? p.name ?? "");
+        // Local name first (Hebrew in Israel), to match the stop names
+        const name = String(p.name ?? p["name:en"] ?? p.name_en ?? "");
         if (!name) continue;
         for (const line of lineStrings(feature, x, y)) {
           labels.push({ name, geometry: line });

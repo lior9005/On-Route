@@ -43,7 +43,7 @@ The web app calls every API directly from the browser, so each one must allow CO
 
 ## Meeting point search: walk mode (RoutingEngine.optimizeWalking)
 
-1. In parallel: transit stops near the passenger (Places), small streets and big roads (OpenFreeMap), and the driver's normal route A→C. Names are in Hebrew: Places with `languageCode: "iw"` (`WALK_NAMES_LANGUAGE`), OSM streets by their local `name`. Bus mode keeps English.
+1. In parallel: transit stops near the passenger (Places), small streets and big roads (OpenFreeMap), and the driver's normal route A→C. Names are in Hebrew: Places and transit requests use `languageCode: "iw"` (`PLACE_NAMES_LANGUAGE`, bus mode too), OSM streets their local `name`.
 2. Street points: corners (3+ distinct directions meeting) plus one point every 100 m. Points within 30 m of a big road (`tertiary` and above) are dropped. Small streets = class `minor`. Also add the spot on the driver's route closest to the passenger.
 3. Pre-select without API calls: straight line within 75% of the walking limit, merge points within 100 m, rank by estimated detour (closest-on-route first), keep the best 15. Short walks (≤ 400 m) get 8 more of their own, so the trade-off table has data at the short end.
 4. Real walking distance with one Route Matrix request (WALK); drop anything over the limit.

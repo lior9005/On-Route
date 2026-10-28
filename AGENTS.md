@@ -45,10 +45,11 @@ The web app calls every API directly from the browser, so each one must allow CO
 
 1. In parallel: transit stops near the passenger (Places), small streets and big roads (OpenFreeMap), and the driver's normal route A→C.
 2. Street points: corners (3+ distinct directions meeting) plus one point every 100 m. Points within 30 m of a big road (`tertiary` and above) are dropped. Small streets = class `minor`. Also add the spot on the driver's route closest to the passenger.
-3. Pre-select without API calls: straight line within 75% of the walking limit, merge points within 100 m, rank by estimated detour (closest-on-route first), keep the best 15.
+3. Pre-select without API calls: straight line within 75% of the walking limit, merge points within 100 m, rank by estimated detour (closest-on-route first), keep the best 15. Short walks (≤ 400 m) get 8 more of their own, so the trade-off table has data at the short end.
 4. Real walking distance with one Route Matrix request (WALK); drop anything over the limit.
 5. Detour route A→point→C per candidate (TRAFFIC_AWARE); drop street points that Google snaps more than 20 m away (probably a bigger road).
-6. Rank: driving times within 60 s count as equal and the shorter walk wins. Merge within 100 m, show the top 3. The UI badges the shortest walk.
+6. Trade-off: for each 100 m walking step up to the limit, the best driving time (`buildWalkingTradeoff`). The slider is the most the passenger will walk; results open on the shortest step within 60 s of the fastest (`suggestWalkingLimit`).
+7. Rank: driving times within 60 s count as equal and the shorter walk wins. Merge within 100 m, show the top 3 within the chosen step (`selectWalkingCandidates`). The UI badges the shortest walk. The "Walk more, drive less?" card (`WalkingTradeoff`) lists the steps where the best time changes; tapping one re-picks from the routed candidates without new API calls.
 
 ## Meeting point search: bus mode (RoutingEngine.optimizeTransit)
 

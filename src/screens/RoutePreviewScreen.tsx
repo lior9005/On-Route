@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Dimensions, Share, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Dimensions, ScrollView, useWindowDimensions } from 'react-native';
 import { CandidatePoint, Coordinates } from '../models';
 import { RouteMap } from '../components/RouteMap';
 import { meetingPointLabel } from '../components/CandidateList';
 import { RouteLoading } from '../components/RouteLoading';
-import { describeBusTrip, meetingPointTerm } from '../utils/transitText';
+import { describeBusTrip, formatClock, meetingPointTerm } from '../utils/transitText';
 import { useRouteVisualization } from '../hooks/useRouteVisualization';
 import { WazeService } from '../services/WazeService';
-import { showAlert } from '../utils/alert';
+import { shareText } from '../utils/share';
 import { secondsToMinutes, metersToKilometers } from '../utils/distance';
 
 interface RoutePreviewScreenProps {
@@ -115,25 +115,26 @@ export function RoutePreviewScreen({
     }
   };
 
-  const handleShareLocation = async () => {
-    try {
-      const locationUrl = `https://www.google.com/maps/search/?api=1&query=${candidate.coordinates.lat},${candidate.coordinates.lon}`;
-      const message = `📍 ${place}: ${candidate.name || place}\n\nLocation: ${locationUrl}`;
-      
-      // Web: use the Web Share API when available, otherwise copy to clipboard
-      if (Platform.OS === 'web' && !(navigator as any).share) {
-        await navigator.clipboard.writeText(message);
-        showAlert('Copied', 'Meeting point link copied to clipboard');
-        return;
-      }
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${candidate.coordinates.lat},${candidate.coordinates.lon}`;
 
-      await Share.share({
-        message,
-        title: 'Meeting Point Location',
-      });
-    } catch (err) {
-      console.error('Error sharing location:', err);
-    }
+  const handleShareLocation = () =>
+    shareText(
+      `📍 ${place}: ${candidate.name || place}\n\nLocation: ${mapsUrl}`,
+      'Meeting Point Location',
+      'Meeting point link copied to clipboard',
+    );
+
+  // Like Waze's "Share drive": tell the passenger when the driver will be at the meeting point.
+  // Bus mode has a planned meeting time; otherwise the driver leaves now.
+  const handleShareDrive = () => {
+    const arrival = candidate.meetTime ?? new Date(Date.now() + candidate.leg1.duration * 1000).toISOString();
+    const minutesAway = Math.max(0, Math.round((Date.parse(arrival) - Date.now()) / 60000));
+    const message =
+      `🚗 I'm on my way to the ${place.toLowerCase()}: ${candidate.name || place}\n` +
+      `⏰ I'll be there around ${formatClock(arrival)} (about ${minutesAway} min)\n\n` +
+      `📍 Map: ${mapsUrl}\n` +
+      `🗺️ Waze: ${WazeService.navigationUrl(candidate.coordinates)}`;
+    return shareText(message, 'My drive', 'Drive details copied to clipboard');
   };
 
   if (loading) {
@@ -231,6 +232,9 @@ export function RoutePreviewScreen({
             <Text style={styles.transferBody}>
               ✅ When you arrive, return to this app and tap "Navigate to Driver Destination" to continue.
             </Text>
+            <Text style={[styles.transferBody, styles.transferTip]}>
+              📡 For live updates, tap "Share drive" in Waze once navigation starts.
+            </Text>
           </View>
 
           <TouchableOpacity 
@@ -253,6 +257,14 @@ export function RoutePreviewScreen({
               <Text style={styles.openWazeButtonText}>Open Waze</Text>
             </Animated.View>
             <View style={styles.buttonShadow} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.shareDriveButton}
+            onPress={handleShareDrive}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.shareDriveButtonText}>📤 Share my drive</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -573,6 +585,27 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     fontWeight: '500',
     letterSpacing: 0.2,
+  },
+  transferTip: {
+    fontSize: 15,
+    color: '#546E7A',
+    marginBottom: 0,
+  },
+  shareDriveButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    alignItems: 'center',
+    marginBottom: 16,
+    width: '100%',
+    maxWidth: 320,
+  },
+  shareDriveButtonText: {
+    color: '#4CAF50',
+    fontSize: 17,
+    fontWeight: '700',
   },
   openWazeButton: {
     backgroundColor: '#2196F3',

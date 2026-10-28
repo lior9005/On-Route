@@ -4,6 +4,13 @@ import { showAlert } from "../utils/alert";
 
 export class WazeService {
   /**
+   * Waze universal link that opens navigation to the destination
+   */
+  static navigationUrl(destination: Coordinates): string {
+    return `https://www.waze.com/ul?ll=${destination.lat}%2C${destination.lon}&navigate=yes&z=10`;
+  }
+
+  /**
    * Open Waze navigation to destination
    */
   static async openNavigation(destination: Coordinates): Promise<void> {
@@ -20,7 +27,7 @@ export class WazeService {
 
     // Use Waze universal link format for better reliability with navigation
     // This format ensures Waze opens with the route already set
-    const url = `https://www.waze.com/ul?ll=${destination.lat}%2C${destination.lon}&navigate=yes&z=10`;
+    const url = WazeService.navigationUrl(destination);
 
     try {
       const canOpen = await Linking.canOpenURL(url);

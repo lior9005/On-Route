@@ -4,3 +4,4 @@ export * from './polylineDecoder';
 export * from './alert';
 export * from './streetCandidates';
 export * from './transitText';
+export * from './share';

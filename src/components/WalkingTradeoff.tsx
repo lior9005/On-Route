@@ -33,10 +33,13 @@ export function WalkingTradeoff({ tradeoff, currentLimit, directDriveTime, selec
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🚶 Walk more, drive less?</Text>
-      <Text style={styles.subtitle}>
-        Fastest spot for each walking distance. Tap one to preview it.
-        {directDriveTime !== null && ` Direct drive without the pickup: ${secondsToMinutes(directDriveTime)} min.`}
-      </Text>
+      <Text style={styles.subtitle}>Fastest spot for each walking distance. Tap one to preview it.</Text>
+      {directDriveTime !== null && (
+        <View style={styles.directBox}>
+          <Text style={styles.directLabel}>🚗 Direct drive, no pickup</Text>
+          <Text style={styles.directValue}>{secondsToMinutes(directDriveTime)} min</Text>
+        </View>
+      )}
       {rows.map((s) => {
         const best = s.best!;
         const isCurrent = s.maxWalk === currentLimit;
@@ -88,6 +91,26 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
     marginBottom: 6,
+  },
+  directBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  directLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1565C0',
+  },
+  directValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1565C0',
   },
   row: {
     flexDirection: 'row',

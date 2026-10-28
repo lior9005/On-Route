@@ -7,6 +7,11 @@ export const CONFIG = {
   TOP_CANDIDATES_COUNT: 3,
   /** Merge meeting point candidates within this distance (meters); keep best per cluster */
   CANDIDATE_MERGE_RADIUS_METERS: 100,
+  /** Search this much beyond the chosen walking limit to show the walk/drive trade-off */
+  TRADEOFF_EXTRA_WALK_METERS: 500,
+  /** Max number of stops beyond the walking limit to route (each costs a Directions call) */
+  TRADEOFF_MAX_EXTRA_ROUTED: 15,
+  TRADEOFF_STEP_METERS: 100,
   SAMPLE_INTERVAL: 5, // Sample every Nth point from polyline
   GOOGLE_MAPS_API_TIMEOUT: 10000, // ms
   GOOGLE_MAPS_API_KEY, // From environment variables

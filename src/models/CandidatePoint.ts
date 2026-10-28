@@ -22,3 +22,9 @@ export interface CandidatePoint {
   placeId?: string; // Google Place ID
   name?: string; // e.g., "Main St & 5th Ave"
 }
+
+/** Best achievable driving time if the passenger may walk up to maxWalk meters */
+export interface WalkingTradeoffStep {
+  maxWalk: number; // meters
+  bestDriveTime: number | null; // seconds; null when no stop is within maxWalk
+}

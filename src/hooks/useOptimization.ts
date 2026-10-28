@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { CandidatePoint, Coordinates } from "../models";
+import { CandidatePoint, Coordinates, WalkingTradeoffStep } from "../models";
 import { GoogleMapsService } from "../services/GoogleMapsService";
 import { RoutingEngine } from "../services/RoutingEngine";
 import { WalkingStrategy } from "../strategies/WalkingStrategy";
@@ -16,11 +16,15 @@ export function useOptimization() {
   const [candidates, setCandidates] = useState<CandidatePoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [routed, setRouted] = useState<CandidatePoint[]>([]);
+  const [tradeoff, setTradeoff] = useState<WalkingTradeoffStep[]>([]);
 
   const runOptimization = useCallback(async (params: OptimizationParams) => {
     setLoading(true);
     setError(null);
     setCandidates([]);
+    setRouted([]);
+    setTradeoff([]);
 
     try {
       // Initialize services
@@ -31,14 +35,17 @@ export function useOptimization() {
       const routingEngine = new RoutingEngine(googleMapsService, strategy);
 
       // Run optimization
-      const results = await routingEngine.optimize(
-        params.start,
-        params.end,
-        params.passengerHome,
-        params.maxWalkingDistance,
-      );
+      const { candidates: results, routed, tradeoff } =
+        await routingEngine.optimizeWithTradeoff(
+          params.start,
+          params.end,
+          params.passengerHome,
+          params.maxWalkingDistance,
+        );
 
       setCandidates(results);
+      setRouted(routed);
+      setTradeoff(tradeoff);
 
       if (results.length === 0) {
         setError(
@@ -54,8 +61,18 @@ export function useOptimization() {
     }
   }, []);
 
+  // Re-pick candidates for another walking limit from the last search, without new API calls
+  const selectWalkingLimit = useCallback(
+    (maxWalk: number) => {
+      setCandidates(RoutingEngine.selectTop(routed, maxWalk));
+    },
+    [routed],
+  );
+
   const clearCandidates = useCallback(() => {
     setCandidates([]);
+    setRouted([]);
+    setTradeoff([]);
     setError(null);
   }, []);
 
@@ -63,7 +80,9 @@ export function useOptimization() {
     candidates,
     loading,
     error,
+    tradeoff,
     runOptimization,
+    selectWalkingLimit,
     clearCandidates,
   };
 }

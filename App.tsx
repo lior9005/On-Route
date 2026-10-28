@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
 import { CandidateList } from './src/components/CandidateList';
+import { WalkingTradeoff } from './src/components/WalkingTradeoff';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
 import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
@@ -67,7 +68,9 @@ export default function App() {
   const formScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   const { journey, saveJourney, advanceStage, clearJourney } = useJourneyState();
-  const { candidates, loading, error, runOptimization, clearCandidates } = useOptimization();
+  const { candidates, loading, error, tradeoff, runOptimization, selectWalkingLimit, clearCandidates } = useOptimization();
+  // Walking limit the shown candidates were picked for (the slider may have moved since)
+  const [resultsWalkingLimit, setResultsWalkingLimit] = useState<number>(CONFIG.DEFAULT_WALKING_DISTANCE);
 
   const handleFindDropoff = async () => {
     const startEmpty = !driverStartText.trim();
@@ -83,6 +86,7 @@ export default function App() {
     }
     setShowValidationErrors(false);
 
+    setResultsWalkingLimit(maxWalkingDistance);
     await runOptimization({
       start: driverStart,
       end: driverDestination,
@@ -699,6 +703,15 @@ export default function App() {
               </TouchableOpacity>
             </View>
             <View style={styles.modalContent}>
+              <WalkingTradeoff
+                tradeoff={tradeoff}
+                currentLimit={resultsWalkingLimit}
+                onSelectLimit={(limit) => {
+                  setResultsWalkingLimit(limit);
+                  setMaxWalkingDistance(limit);
+                  selectWalkingLimit(limit);
+                }}
+              />
               <CandidateList
                 candidates={candidates}
                 selectedId={selectedCandidate?.id}

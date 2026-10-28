@@ -36,8 +36,6 @@ export interface SearchParams {
 export class RoutingEngine {
   /** Details of the most recent optimize() call */
   lastSearchInfo: SearchInfo | null = null;
-  /** Walk mode: every routed candidate of the last search */
-  lastRouted: CandidatePoint[] = [];
   /** Walk mode: best driving time at each walking-limit step of the last search */
   lastTradeoff: WalkingTradeoffStep[] = [];
   /** Walk mode: the walking limit the returned candidates were picked for */
@@ -78,7 +76,6 @@ export class RoutingEngine {
     maxConstraint: number,
     departureTime?: Date | null,
   ): Promise<CandidatePoint[]> {
-    this.lastRouted = [];
     this.lastTradeoff = [];
     this.lastWalkingLimit = null;
 
@@ -285,7 +282,6 @@ export class RoutingEngine {
 
     // Step 7: Walk/drive trade-off over everything routed; start on the
     // shortest walk that is about as fast as walking the whole way
-    this.lastRouted = validCandidates;
     this.lastTradeoff = buildWalkingTradeoff(validCandidates, maxConstraint);
     this.lastWalkingLimit = suggestWalkingLimit(this.lastTradeoff) ?? maxConstraint;
 
@@ -557,13 +553,13 @@ export function buildWalkingTradeoff(
   for (let maxWalk = step; maxWalk < maxRadius; maxWalk += step) limits.push(maxWalk);
   limits.push(maxRadius);
   for (const maxWalk of limits) {
-    let best: number | null = null;
+    let best: CandidatePoint | null = null;
     for (const c of routed) {
-      if (c.passengerLeg.distance <= maxWalk && (best === null || c.totalDetour < best)) {
-        best = c.totalDetour;
+      if (c.passengerLeg.distance <= maxWalk && (!best || c.totalDetour < best.totalDetour)) {
+        best = c;
       }
     }
-    steps.push({ maxWalk, bestDriveTime: best });
+    steps.push({ maxWalk, bestDriveTime: best?.totalDetour ?? null, best });
   }
   return steps;
 }

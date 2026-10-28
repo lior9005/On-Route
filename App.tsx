@@ -96,7 +96,6 @@ function MainApp() {
     tradeoff,
     walkingLimit,
     runOptimization,
-    selectWalkingLimit,
     clearCandidates,
   } = useOptimization();
 
@@ -804,7 +803,8 @@ function MainApp() {
                 <WalkingTradeoff
                   tradeoff={tradeoff}
                   currentLimit={walkingLimit}
-                  onSelectLimit={selectWalkingLimit}
+                  selectedId={selectedCandidate?.id}
+                  onSelect={handleSelectCandidate}
                 />
               )}
               <CandidateList

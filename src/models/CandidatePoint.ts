@@ -99,4 +99,5 @@ export interface CandidatePoint {
 export interface WalkingTradeoffStep {
   maxWalk: number; // meters
   bestDriveTime: number | null; // seconds (A → point → C); null when nothing is within maxWalk
+  best: CandidatePoint | null; // The meeting point that gives bestDriveTime
 }

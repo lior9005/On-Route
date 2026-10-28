@@ -49,7 +49,7 @@ The web app calls every API directly from the browser, so each one must allow CO
 4. Real walking distance with one Route Matrix request (WALK); drop anything over the limit.
 5. Detour route A→point→C per candidate (TRAFFIC_AWARE); drop street points that Google snaps more than 20 m away (probably a bigger road).
 6. Trade-off: for each 100 m walking step up to the limit, the best driving time (`buildWalkingTradeoff`). The slider is the most the passenger will walk; results open on the shortest step within 60 s of the fastest (`suggestWalkingLimit`).
-7. Rank: driving times within 60 s count as equal and the shorter walk wins. Merge within 100 m, show the top 3 within the chosen step (`selectWalkingCandidates`). The UI badges the shortest walk. The "Walk more, drive less?" card (`WalkingTradeoff`) lists the steps where the best time changes; tapping one re-picks from the routed candidates without new API calls.
+7. Rank: driving times within 60 s count as equal and the shorter walk wins. Merge within 100 m, show the top 3 within the chosen step (`selectWalkingCandidates`). The UI badges the shortest walk. The "Walk more, drive less?" card (`WalkingTradeoff`) lists the steps where the fastest point changes, naming that point; tapping a row opens its preview.
 
 ## Meeting point search: bus mode (RoutingEngine.optimizeTransit)
 

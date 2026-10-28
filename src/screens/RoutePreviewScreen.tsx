@@ -15,6 +15,7 @@ interface RoutePreviewScreenProps {
   startPoint: Coordinates;
   endPoint: Coordinates;
   passengerHome: Coordinates;
+  departureTime?: Date | null; // Planned ride; null/undefined = leave now
   onConfirm: () => void;
   onBack: () => void;
 }
@@ -24,6 +25,7 @@ export function RoutePreviewScreen({
   startPoint,
   endPoint,
   passengerHome,
+  departureTime,
   onConfirm,
   onBack,
 }: RoutePreviewScreenProps) {
@@ -40,8 +42,8 @@ export function RoutePreviewScreen({
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-    fetchVisualization(candidate, startPoint, endPoint, passengerHome);
-  }, [candidate, startPoint, endPoint, passengerHome, fetchVisualization]);
+    fetchVisualization(candidate, startPoint, endPoint, passengerHome, departureTime);
+  }, [candidate, startPoint, endPoint, passengerHome, departureTime, fetchVisualization]);
 
   // Animate the Waze screen when it appears
   useEffect(() => {

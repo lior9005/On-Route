@@ -219,7 +219,8 @@ export class RoutingEngine {
       maxConstraint,
     );
 
-    // Step 5: For each valid point, calculate detour route
+    // Step 5: For each valid point, calculate detour route without traffic
+    // (cheaper rate); the finalists get traffic in step 7
     // Start (A) → Meeting Point (D) → Destination (C)
     const detourResults = await Promise.allSettled(
       preselected.map(async (rawCandidate, i) => {
@@ -234,6 +235,7 @@ export class RoutingEngine {
           rawCandidate.location,
           end,
           departureTime,
+          false,
         );
 
         // Google stops the car on the nearest road; if that is far from the
@@ -284,13 +286,42 @@ export class RoutingEngine {
       }
     }
 
-    // Step 7: Walk/drive trade-off over everything routed; start on the
+    // Step 7: Re-route only the finalists with traffic; everything below
+    // compares traffic times only (keep the estimates if none come back)
+    const finalists = pickTrafficFinalists(validCandidates, maxConstraint);
+    const trafficResults = await Promise.allSettled(
+      finalists.map(async (c): Promise<CandidatePoint> => {
+        const detourRoute = await this.googleMapsService.computeDetourRoute(
+          start,
+          c.coordinates,
+          end,
+          departureTime,
+        );
+        const totalDetour =
+          detourRoute.leg1.duration + detourRoute.leg2.duration;
+        return {
+          ...c,
+          leg1: detourRoute.leg1,
+          leg2: detourRoute.leg2,
+          totalDetour,
+          extraDriveTime: baseline
+            ? Math.max(0, totalDetour - baseline.duration)
+            : undefined,
+        };
+      }),
+    );
+    const withTraffic = trafficResults
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((c): c is CandidatePoint => c !== null);
+    const routed = withTraffic.length > 0 ? withTraffic : validCandidates;
+
+    // Step 8: Walk/drive trade-off over everything routed; start on the
     // shortest walk that is about as fast as walking the whole way
-    this.lastTradeoff = buildWalkingTradeoff(validCandidates, maxConstraint);
+    this.lastTradeoff = buildWalkingTradeoff(routed, maxConstraint);
     this.lastWalkingLimit = suggestWalkingLimit(this.lastTradeoff) ?? maxConstraint;
 
-    // Step 8: Rank, merge and keep the top N within that walking limit
-    return selectWalkingCandidates(validCandidates, this.lastWalkingLimit);
+    // Step 9: Rank, merge and keep the top N within that walking limit
+    return selectWalkingCandidates(routed, this.lastWalkingLimit);
   }
 
   /**
@@ -447,6 +478,27 @@ export class RoutingEngine {
     }
     return merged.slice(0, CONFIG.TOP_CANDIDATES_COUNT);
   }
+}
+
+/**
+ * Walk mode: the candidates worth a traffic-aware route, judged on routes
+ * without traffic - the best few within the suggested walking limit, plus the
+ * best at each step of the trade-off table so every step keeps an answer.
+ */
+export function pickTrafficFinalists(
+  routed: CandidatePoint[],
+  maxWalk: number,
+): CandidatePoint[] {
+  const tradeoff = buildWalkingTradeoff(routed, maxWalk);
+  const limit = suggestWalkingLimit(tradeoff) ?? maxWalk;
+  const top = rankCandidates(
+    routed.filter((c) => c.passengerLeg.distance <= limit),
+    CONFIG.DRIVE_TIME_TIE_SECONDS,
+  ).slice(0, CONFIG.TRAFFIC_FINALISTS_COUNT);
+  const steps = tradeoff
+    .map((s) => s.best)
+    .filter((c): c is CandidatePoint => c !== null);
+  return [...new Set([...top, ...steps])];
 }
 
 /**

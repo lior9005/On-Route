@@ -16,6 +16,7 @@ export function useRouteVisualization() {
       start: Coordinates,
       end: Coordinates,
       passengerHome: Coordinates,
+      departureTime?: Date | null,
     ) => {
       setLoading(true);
       setError(null);
@@ -38,6 +39,7 @@ export function useRouteVisualization() {
           start,
           end,
           passengerHome,
+          departureTime,
         );
         await minimumWait();
         setVisualization(result);

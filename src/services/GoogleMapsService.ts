@@ -248,13 +248,15 @@ export class GoogleMapsService {
     start: Coordinates,
     end: Coordinates,
     passengerHome: Coordinates,
+    departureTime?: Date | null,
   ): Promise<any> {
     // Bus trips already carry their map lines (bus + walking parts)
     const transitSegments = candidate.passengerLeg?.transit?.segments as
       | Array<{ kind: "WALK" | "BUS"; polyline: string }>
       | undefined;
 
-    // Fetch the detour route with per-leg polylines (with real-time traffic)
+    // Fetch the detour route with per-leg polylines (with traffic at the
+    // planned time, same as the search)
     // and, for walking candidates, the walking route to the passenger in parallel
     const [detourRoute, walkingRoute] = await Promise.all([
       this.computeRoute(
@@ -264,6 +266,7 @@ export class GoogleMapsService {
         "DRIVE",
         "routes.legs.polyline.encodedPolyline",
         "Failed to fetch route visualization",
+        departureTime,
       ),
       transitSegments
         ? Promise.resolve(null)
@@ -346,6 +349,7 @@ export class GoogleMapsService {
     dropoff: Coordinates,
     end: Coordinates,
     departureTime?: Date | null,
+    trafficAware = true,
   ): Promise<DetourRoute> {
     const route = await this.computeRoute(
       start,
@@ -355,6 +359,7 @@ export class GoogleMapsService {
       "routes.legs.duration,routes.legs.distanceMeters,routes.legs.endLocation",
       "Failed to compute detour route",
       departureTime,
+      trafficAware,
     );
 
     const legs = route.legs ?? [];
@@ -439,6 +444,7 @@ export class GoogleMapsService {
     fieldMask: string,
     errorMessage: string,
     departureTime?: Date | null,
+    trafficAware = true,
   ): Promise<RoutesApiRoute> {
     const toWaypoint = (c: Coordinates) => ({
       location: { latLng: { latitude: c.lat, longitude: c.lon } },
@@ -455,8 +461,11 @@ export class GoogleMapsService {
     }
 
     // TRAFFIC_AWARE uses real-time traffic (departure time defaults to now);
-    // routing preference is only allowed for driving
-    if (travelMode === "DRIVE") {
+    // routing preference is only allowed for driving. TRAFFIC_UNAWARE is
+    // billed at the cheaper rate; departure time is only allowed with traffic.
+    if (travelMode === "DRIVE" && !trafficAware) {
+      body.routingPreference = "TRAFFIC_UNAWARE";
+    } else if (travelMode === "DRIVE") {
       body.routingPreference = "TRAFFIC_AWARE";
       // Planned rides: predicted traffic at that time (must be in the future)
       if (departureTime && departureTime.getTime() > Date.now() + 60_000) {

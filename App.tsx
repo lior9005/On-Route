@@ -473,6 +473,7 @@ function MainApp() {
           startPoint={driverStart}
           endPoint={driverDestination}
           passengerHome={passengerHome}
+          departureTime={departureTime}
           onConfirm={handleConfirmNavigation}
           onBack={() => {
             setShowPreview(false);

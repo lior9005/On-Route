@@ -27,6 +27,8 @@ export const CONFIG = {
   /** Walk mode: extra candidates reserved for short walks (each costs a route request) */
   TRADEOFF_SHORT_WALK_CANDIDATES: 8,
   TRADEOFF_STEP_METERS: 100,
+  /** Walk mode: candidates are first routed without traffic (cheaper); this many of the best get a traffic-aware route */
+  TRAFFIC_FINALISTS_COUNT: 6,
   // Real walking routes run ~30% longer than a straight line: only shortlist
   // points within this share of the walking limit (straight line)
   WALK_PREFILTER_RATIO: 0.75,

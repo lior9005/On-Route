@@ -807,6 +807,11 @@ function MainApp() {
                   onSelect={handleSelectCandidate}
                 />
               )}
+              {walkingLimit !== null && (
+                <Text style={styles.candidatesHeading}>
+                  Best {candidates.length === 1 ? 'spot' : `${candidates.length} spots`} within a {walkingLimit}m walk
+                </Text>
+              )}
               <CandidateList
                 candidates={candidates}
                 selectedId={selectedCandidate?.id}
@@ -1031,6 +1036,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
     marginTop: 4,
+  },
+  candidatesHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
   },
   closeButton: {
     width: 32,

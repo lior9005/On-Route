@@ -177,7 +177,15 @@ export class RoutingEngine {
     const preselected = [
       ...shortWalk,
       ...preselectCandidates(
-        inRange.filter((c) => !shortWalk.includes(c)),
+        // Skip points the short-walk share already covers
+        inRange.filter(
+          (c) =>
+            !shortWalk.some(
+              (s) =>
+                haversineDistance(s.location, c.location) <
+                CONFIG.CANDIDATE_MERGE_RADIUS_METERS,
+            ),
+        ),
         start,
         end,
         CONFIG.CANDIDATE_MERGE_RADIUS_METERS,
@@ -491,8 +499,9 @@ export function rankCandidates(
 /**
  * Walk mode: the best candidates within maxWalk. Ranked by driving time;
  * near-equal driving times (within DRIVE_TIME_TIE_SECONDS) are decided by the
- * shorter passenger walk. Merged within CANDIDATE_MERGE_RADIUS_METERS (best
- * per cluster), top TOP_CANDIDATES_COUNT.
+ * shorter passenger walk. Merged within CANDIDATE_MERGE_RADIUS_METERS and by
+ * name (stops on both sides of a street share one; best per cluster), top
+ * TOP_CANDIDATES_COUNT.
  */
 export function selectWalkingCandidates(
   routed: CandidatePoint[],
@@ -506,10 +515,12 @@ export function selectWalkingCandidates(
   const merged: CandidatePoint[] = [];
   const mergeRadius = CONFIG.CANDIDATE_MERGE_RADIUS_METERS;
   for (const c of ranked) {
-    const tooClose = merged.some(
-      (m) => haversineDistance(c.coordinates, m.coordinates) < mergeRadius,
+    const duplicate = merged.some(
+      (m) =>
+        haversineDistance(c.coordinates, m.coordinates) < mergeRadius ||
+        (c.name && m.kind === c.kind && m.name === c.name),
     );
-    if (!tooClose) merged.push(c);
+    if (!duplicate) merged.push(c);
   }
 
   return merged.slice(0, CONFIG.TOP_CANDIDATES_COUNT);

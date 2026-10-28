@@ -69,7 +69,7 @@ export function useOptimization() {
         setError(
           (params.mode === "BUS"
             ? "No direct bus options found. Try allowing more extra driving, or switch to walking."
-            : "No suitable drop/pick locations found. Try increasing the maximum walking distance.") +
+            : `No suitable drop/pick locations found within a ${CONFIG.WALK_SEARCH_DISTANCE}m walk.`) +
             (summary ? `\n\n${summary}` : ""),
         );
       }

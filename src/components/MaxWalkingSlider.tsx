@@ -50,21 +50,6 @@ interface ValueSliderProps {
   onValueChange: (value: number) => void;
 }
 
-export function MaxWalkingSlider({ value, onValueChange }: ValueSliderProps) {
-  return (
-    <LabeledSlider
-      icon="🚶"
-      label="Most the passenger will walk"
-      value={value}
-      unit="m"
-      min={CONFIG.MIN_WALKING_DISTANCE}
-      max={CONFIG.MAX_WALKING_DISTANCE}
-      step={100}
-      onValueChange={onValueChange}
-    />
-  );
-}
-
 /**
  * Bus mode: how much extra driving the driver accepts
  */

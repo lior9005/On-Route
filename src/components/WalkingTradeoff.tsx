@@ -6,7 +6,7 @@ import { meetingPointLabel } from './CandidateList';
 
 interface WalkingTradeoffProps {
   tradeoff: WalkingTradeoffStep[];
-  currentLimit: number; // The walk the results below were picked for
+  currentLimit: number; // The suggested walk (shortest within a minute of the fastest)
   selectedId?: string;
   onSelect: (candidate: CandidatePoint) => void;
 }
@@ -29,9 +29,6 @@ export function WalkingTradeoff({ tradeoff, currentLimit, selectedId, onSelect }
     const prev = tradeoff[i - 1];
     return !prev || prev.best?.id !== s.best.id;
   });
-  if (rows.length < 2) {
-    return null; // Walking more or less changes nothing
-  }
 
   // First longer walk that saves at least a minute of driving
   const nextGain = tradeoff.find(

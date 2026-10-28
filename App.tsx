@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
-import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
+import { MaxDetourSlider } from './src/components/MaxWalkingSlider';
 import { WalkingTradeoff } from './src/components/WalkingTradeoff';
 import { SegmentedControl } from './src/components/SegmentedControl';
 import { DepartureTimePicker } from './src/components/DepartureTimePicker';
@@ -56,7 +56,6 @@ function MainApp() {
   const [driverStartText, setDriverStartText] = useState<string>('');
   const [driverDestinationText, setDriverDestinationText] = useState<string>('');
   const [passengerHomeText, setPassengerHomeText] = useState<string>('');
-  const [maxWalkingDistance, setMaxWalkingDistance] = useState<number>(CONFIG.DEFAULT_WALKING_DISTANCE);
   const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
   const [tripDirection, setTripDirection] = useState<TripDirection>('DROP_OFF');
   const [maxDetourMinutes, setMaxDetourMinutes] = useState<number>(CONFIG.DEFAULT_MAX_DETOUR_MINUTES);
@@ -122,7 +121,7 @@ function MainApp() {
       end: driverDestination,
       passengerHome,
       mode: travelMode,
-      maxWalkingDistance,
+      maxWalkingDistance: CONFIG.WALK_SEARCH_DISTANCE,
       direction: tripDirection,
       maxDetourMinutes,
       departureTime,
@@ -727,12 +726,7 @@ function MainApp() {
             />
           )}
 
-          {travelMode === 'WALK' ? (
-            <MaxWalkingSlider
-              value={maxWalkingDistance}
-              onValueChange={(value) => setMaxWalkingDistance(value)}
-            />
-          ) : (
+          {travelMode === 'BUS' && (
             <MaxDetourSlider
               value={maxDetourMinutes}
               onValueChange={(value) => setMaxDetourMinutes(value)}
@@ -786,7 +780,11 @@ function MainApp() {
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderText}>
                 <Text style={styles.modalTitle}>Select {formPlace}</Text>
-                <Text style={styles.modalSubtitle}>{candidates.length} options found</Text>
+                <Text style={styles.modalSubtitle}>
+                  {walkingLimit !== null
+                    ? `Walks up to ${CONFIG.WALK_SEARCH_DISTANCE}m checked`
+                    : `${candidates.length} options found`}
+                </Text>
                 {searchSummary && (
                   <Text style={styles.searchSummary}>{searchSummary}</Text>
                 )}
@@ -800,23 +798,22 @@ function MainApp() {
             </View>
             <View style={styles.modalContent}>
               {walkingLimit !== null && (
-                <WalkingTradeoff
-                  tradeoff={tradeoff}
-                  currentLimit={walkingLimit}
+                <ScrollView>
+                  <WalkingTradeoff
+                    tradeoff={tradeoff}
+                    currentLimit={walkingLimit}
+                    selectedId={selectedCandidate?.id}
+                    onSelect={handleSelectCandidate}
+                  />
+                </ScrollView>
+              )}
+              {walkingLimit === null && (
+                <CandidateList
+                  candidates={candidates}
                   selectedId={selectedCandidate?.id}
                   onSelect={handleSelectCandidate}
                 />
               )}
-              {walkingLimit !== null && (
-                <Text style={styles.candidatesHeading}>
-                  Best {candidates.length === 1 ? 'spot' : `${candidates.length} spots`} within a {walkingLimit}m walk
-                </Text>
-              )}
-              <CandidateList
-                candidates={candidates}
-                selectedId={selectedCandidate?.id}
-                onSelect={handleSelectCandidate}
-              />
             </View>
           </View>
         </View>
@@ -1036,12 +1033,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
     marginTop: 4,
-  },
-  candidatesHeading: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
   },
   closeButton: {
     width: 32,

@@ -7,9 +7,7 @@ export const CONFIG = {
     process.env.EXPO_PUBLIC_APP_PASSWORD_SHA256 ||
     "b2f7d6a21d9ad46561304b2aabcff6896c5e0bc680f6c5dcfa7574759d5f388c",
 
-  MAX_WALKING_DISTANCE: 2000, // meters
-  MIN_WALKING_DISTANCE: 100, // meters
-  DEFAULT_WALKING_DISTANCE: 1000, // meters; the most the passenger will walk, results may suggest less
+  WALK_SEARCH_DISTANCE: 1000, // meters; walk mode checks every walk up to this
   TOP_CANDIDATES_COUNT: 3,
   /** Merge meeting point candidates within this distance (meters); keep best per cluster */
   CANDIDATE_MERGE_RADIUS_METERS: 100,

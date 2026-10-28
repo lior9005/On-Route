@@ -48,14 +48,14 @@ The web app calls every API directly from the browser, so each one must allow CO
 3. Pre-select without API calls: straight line within 75% of the walking limit, merge points within 100 m, rank by estimated detour (closest-on-route first), keep the best 15. Short walks (≤ 400 m) get 8 more of their own, so the trade-off table has data at the short end.
 4. Real walking distance with one Route Matrix request (WALK); drop anything over the limit.
 5. Detour route A→point→C per candidate (TRAFFIC_AWARE); drop street points that Google snaps more than 20 m away (probably a bigger road).
-6. Trade-off: for each 100 m walking step up to the limit, the best driving time (`buildWalkingTradeoff`). The slider is the most the passenger will walk; results open on the shortest step within 60 s of the fastest (`suggestWalkingLimit`).
-7. Rank: driving times within 60 s count as equal and the shorter walk wins. Merge within 100 m, show the top 3 within the chosen step (`selectWalkingCandidates`). The UI badges the shortest walk. The "Walk more, drive less?" card (`WalkingTradeoff`) lists the steps where the fastest point changes, naming that point; tapping a row opens its preview.
+6. Trade-off: for each 100 m walking step up to the limit, the fastest point (`buildWalkingTradeoff`). There is no walking slider: the limit is always `WALK_SEARCH_DISTANCE` (1 km). The suggested step is the shortest one within 60 s of the fastest (`suggestWalkingLimit`).
+7. The results modal shows only the "Walk more, drive less?" table (`WalkingTradeoff`): one row per step where the fastest point changes, naming that point, with the suggested row marked; tapping a row opens its preview. `selectWalkingCandidates` (rank with the 60 s tie rule, merge within 100 m or by name, top 3) still fills `candidates`, which keeps the modal open.
 
 ## Meeting point search: bus mode (RoutingEngine.optimizeTransit)
 
 The form has a **Leave now / Plan a ride** switch (`DepartureTimePicker`: next 7 days, 15-minute steps). A planned time is passed as `departureTime` to every DRIVE request, for predicted traffic, and is the base for the bus timings. The map preview's route request still uses "now", since it only draws lines.
 
-The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch and a "Max extra driving" slider instead of the walking slider.
+The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch and a "Max extra driving" slider.
 
 1. Fetch the driver's normal route A→C, then the bus stops along it: Places Text Search with `searchAlongRouteParameters` and `includedType: bus_stop`, falling back to `transit_station`.
 2. Pre-select the 15 stops with the best estimated extra driving + bus time (straight-line estimates), skipping stops clearly over the detour budget.

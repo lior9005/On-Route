@@ -94,6 +94,7 @@ function MainApp() {
     searchSummary,
     tradeoff,
     walkingLimit,
+    directDriveTime,
     runOptimization,
     clearCandidates,
   } = useOptimization();
@@ -802,6 +803,7 @@ function MainApp() {
                   <WalkingTradeoff
                     tradeoff={tradeoff}
                     currentLimit={walkingLimit}
+                    directDriveTime={directDriveTime}
                     selectedId={selectedCandidate?.id}
                     onSelect={handleSelectCandidate}
                   />

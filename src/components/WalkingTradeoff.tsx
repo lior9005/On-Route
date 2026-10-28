@@ -7,6 +7,7 @@ import { meetingPointLabel } from './CandidateList';
 interface WalkingTradeoffProps {
   tradeoff: WalkingTradeoffStep[];
   currentLimit: number; // The suggested walk (shortest within a minute of the fastest)
+  directDriveTime: number | null; // The driver's direct A→C time (seconds), if known
   selectedId?: string;
   onSelect: (candidate: CandidatePoint) => void;
 }
@@ -16,7 +17,7 @@ interface WalkingTradeoffProps {
  * Each row names the one meeting point that gives that time; only steps where
  * the best point changes are listed, plus the current limit.
  */
-export function WalkingTradeoff({ tradeoff, currentLimit, selectedId, onSelect }: WalkingTradeoffProps) {
+export function WalkingTradeoff({ tradeoff, currentLimit, directDriveTime, selectedId, onSelect }: WalkingTradeoffProps) {
   const current = tradeoff.find((s) => s.maxWalk === currentLimit);
   if (!current || current.bestDriveTime === null) {
     return null;
@@ -47,12 +48,18 @@ export function WalkingTradeoff({ tradeoff, currentLimit, selectedId, onSelect }
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🚶 Walk more, drive less?</Text>
-      <Text style={styles.subtitle}>Fastest spot for each walking distance. Tap one to preview it.</Text>
+      <Text style={styles.subtitle}>
+        Fastest spot for each walking distance. Tap one to preview it.
+        {directDriveTime !== null && ` Direct drive without the pickup: ${secondsToMinutes(directDriveTime)} min.`}
+      </Text>
       {hint && <Text style={styles.hint}>{hint}</Text>}
       {rows.map((s) => {
         const best = s.best!;
         const isCurrent = s.maxWalk === currentLimit;
-        const diffMin = secondsToMinutes(best.totalDetour - baseline);
+        const addedMin =
+          directDriveTime !== null
+            ? secondsToMinutes(Math.max(0, best.totalDetour - directDriveTime))
+            : null;
         return (
           <TouchableOpacity
             key={s.maxWalk}
@@ -61,7 +68,7 @@ export function WalkingTradeoff({ tradeoff, currentLimit, selectedId, onSelect }
           >
             <View style={styles.rowMain}>
               <Text style={[styles.walk, isCurrent && styles.currentText]}>
-                Up to {s.maxWalk}m
+                Up to {s.maxWalk}m{isCurrent ? ' · suggested' : ''}
               </Text>
               <Text style={styles.place} numberOfLines={1}>
                 {meetingPointLabel(best)} · {Math.round(best.passengerLeg.distance)}m walk
@@ -69,9 +76,9 @@ export function WalkingTradeoff({ tradeoff, currentLimit, selectedId, onSelect }
             </View>
             <View style={styles.rowTime}>
               <Text style={styles.drive}>{secondsToMinutes(best.totalDetour)} min</Text>
-              <Text style={[styles.diff, diffMin < 0 && styles.saving, diffMin > 0 && styles.loss]}>
-                {isCurrent ? 'suggested' : diffMin === 0 ? '±0' : `${diffMin > 0 ? '+' : ''}${diffMin} min`}
-              </Text>
+              {addedMin !== null && (
+                <Text style={styles.added}>+{addedMin} min vs direct</Text>
+              )}
             </View>
           </TouchableOpacity>
         );
@@ -141,15 +148,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#333',
   },
-  diff: {
+  added: {
     fontSize: 12,
-    color: '#666',
-  },
-  saving: {
-    color: '#2E7D32',
-    fontWeight: '700',
-  },
-  loss: {
     color: '#C62828',
   },
 });

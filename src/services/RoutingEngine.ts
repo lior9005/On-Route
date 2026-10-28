@@ -40,6 +40,8 @@ export class RoutingEngine {
   lastTradeoff: WalkingTradeoffStep[] = [];
   /** Walk mode: the walking limit the returned candidates were picked for */
   lastWalkingLimit: number | null = null;
+  /** Walk mode: the driver's direct A→C time (seconds), when it could be fetched */
+  lastDirectDriveTime: number | null = null;
 
   constructor(
     private googleMapsService: GoogleMapsService,
@@ -78,6 +80,7 @@ export class RoutingEngine {
   ): Promise<CandidatePoint[]> {
     this.lastTradeoff = [];
     this.lastWalkingLimit = null;
+    this.lastDirectDriveTime = null;
 
     // Step 1: In parallel - transit stops near the passenger, small streets
     // near the passenger (OpenStreetMap) and the driver's normal route
@@ -111,6 +114,7 @@ export class RoutingEngine {
 
     const baseline =
       baselineResult.status === "fulfilled" ? baselineResult.value : null;
+    this.lastDirectDriveTime = baseline ? baseline.duration : null;
     const driverRoute: Coordinates[] = baseline
       ? decodePolyline(baseline.polyline).map((p) => ({
           lat: p.latitude,

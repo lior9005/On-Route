@@ -32,6 +32,7 @@ export function useOptimization() {
   const [tradeoff, setTradeoff] = useState<WalkingTradeoffStep[]>([]);
   // Walk mode: the walking limit the shown candidates were picked for
   const [walkingLimit, setWalkingLimit] = useState<number | null>(null);
+  const [directDriveTime, setDirectDriveTime] = useState<number | null>(null);
 
   const runOptimization = useCallback(async (params: OptimizationParams) => {
     setLoading(true);
@@ -40,6 +41,7 @@ export function useOptimization() {
     setSearchSummary(null);
     setTradeoff([]);
     setWalkingLimit(null);
+    setDirectDriveTime(null);
 
     try {
       // Initialize services
@@ -60,6 +62,7 @@ export function useOptimization() {
       setCandidates(results);
       setTradeoff(routingEngine.lastTradeoff);
       setWalkingLimit(routingEngine.lastWalkingLimit);
+      setDirectDriveTime(routingEngine.lastDirectDriveTime);
       const summary = routingEngine.lastSearchInfo
         ? describeSearch(routingEngine.lastSearchInfo)
         : null;
@@ -86,6 +89,7 @@ export function useOptimization() {
     setCandidates([]);
     setTradeoff([]);
     setWalkingLimit(null);
+    setDirectDriveTime(null);
     setError(null);
   }, []);
 
@@ -96,6 +100,7 @@ export function useOptimization() {
     searchSummary,
     tradeoff,
     walkingLimit,
+    directDriveTime,
     runOptimization,
     clearCandidates,
   };

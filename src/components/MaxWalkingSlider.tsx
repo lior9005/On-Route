@@ -54,7 +54,7 @@ export function MaxWalkingSlider({ value, onValueChange }: ValueSliderProps) {
   return (
     <LabeledSlider
       icon="🚶"
-      label="Max walking distance"
+      label="Most the passenger will walk"
       value={value}
       unit="m"
       min={CONFIG.MIN_WALKING_DISTANCE}

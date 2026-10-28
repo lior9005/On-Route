@@ -7,3 +7,4 @@ export * from './SearchingIndicator';
 export * from './SegmentedControl';
 export * from './DepartureTimePicker';
 export * from './PasswordGate';
+export * from './WalkingTradeoff';

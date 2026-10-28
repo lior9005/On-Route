@@ -9,7 +9,7 @@ export const CONFIG = {
 
   MAX_WALKING_DISTANCE: 2000, // meters
   MIN_WALKING_DISTANCE: 100, // meters
-  DEFAULT_WALKING_DISTANCE: 500, // meters
+  DEFAULT_WALKING_DISTANCE: 1000, // meters; the most the passenger will walk, results may suggest less
   TOP_CANDIDATES_COUNT: 3,
   /** Merge meeting point candidates within this distance (meters); keep best per cluster */
   CANDIDATE_MERGE_RADIUS_METERS: 100,
@@ -23,6 +23,11 @@ export const CONFIG = {
   ON_ROUTE_THRESHOLD_METERS: 25, // Point counts as on the driver's route within this distance
   MAX_SNAP_DISTANCE_METERS: 20, // Drop street points Google snaps further than this
   MAX_CANDIDATES_TO_EVALUATE: 15, // Candidates sent to Google APIs per search
+  /** Walk mode trade-off table: walks up to this count as short and get their own candidates */
+  TRADEOFF_SHORT_WALK_METERS: 400,
+  /** Walk mode: extra candidates reserved for short walks (each costs a route request) */
+  TRADEOFF_SHORT_WALK_CANDIDATES: 8,
+  TRADEOFF_STEP_METERS: 100,
   // Real walking routes run ~30% longer than a straight line: only shortlist
   // points within this share of the walking limit (straight line)
   WALK_PREFILTER_RATIO: 0.75,

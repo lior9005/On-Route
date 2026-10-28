@@ -1,8 +1,18 @@
 import { useState, useCallback } from "react";
-import { CandidatePoint, Coordinates, TravelMode, TripDirection } from "../models";
+import {
+  CandidatePoint,
+  Coordinates,
+  TravelMode,
+  TripDirection,
+  WalkingTradeoffStep,
+} from "../models";
 import { GoogleMapsService } from "../services/GoogleMapsService";
 import { OsmService } from "../services/OsmService";
-import { RoutingEngine, describeSearch } from "../services/RoutingEngine";
+import {
+  RoutingEngine,
+  describeSearch,
+  selectWalkingCandidates,
+} from "../services/RoutingEngine";
 import { WalkingStrategy } from "../strategies/WalkingStrategy";
 import { TransitStrategy } from "../strategies/TransitStrategy";
 import { CONFIG } from "../constants/config";
@@ -23,12 +33,19 @@ export function useOptimization() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchSummary, setSearchSummary] = useState<string | null>(null);
+  const [routed, setRouted] = useState<CandidatePoint[]>([]);
+  const [tradeoff, setTradeoff] = useState<WalkingTradeoffStep[]>([]);
+  // Walk mode: the walking limit the shown candidates were picked for
+  const [walkingLimit, setWalkingLimit] = useState<number | null>(null);
 
   const runOptimization = useCallback(async (params: OptimizationParams) => {
     setLoading(true);
     setError(null);
     setCandidates([]);
     setSearchSummary(null);
+    setRouted([]);
+    setTradeoff([]);
+    setWalkingLimit(null);
 
     try {
       // Initialize services
@@ -47,6 +64,9 @@ export function useOptimization() {
       const results = await routingEngine.optimize(params);
 
       setCandidates(results);
+      setRouted(routingEngine.lastRouted);
+      setTradeoff(routingEngine.lastTradeoff);
+      setWalkingLimit(routingEngine.lastWalkingLimit);
       const summary = routingEngine.lastSearchInfo
         ? describeSearch(routingEngine.lastSearchInfo)
         : null;
@@ -69,8 +89,20 @@ export function useOptimization() {
     }
   }, []);
 
+  // Walk mode: re-pick candidates for another walking limit from the last search, without new API calls
+  const selectWalkingLimit = useCallback(
+    (maxWalk: number) => {
+      setCandidates(selectWalkingCandidates(routed, maxWalk));
+      setWalkingLimit(maxWalk);
+    },
+    [routed],
+  );
+
   const clearCandidates = useCallback(() => {
     setCandidates([]);
+    setRouted([]);
+    setTradeoff([]);
+    setWalkingLimit(null);
     setError(null);
   }, []);
 
@@ -79,7 +111,10 @@ export function useOptimization() {
     loading,
     error,
     searchSummary,
+    tradeoff,
+    walkingLimit,
     runOptimization,
+    selectWalkingLimit,
     clearCandidates,
   };
 }

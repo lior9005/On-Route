@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensio
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
 import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
+import { WalkingTradeoff } from './src/components/WalkingTradeoff';
 import { SegmentedControl } from './src/components/SegmentedControl';
 import { DepartureTimePicker } from './src/components/DepartureTimePicker';
 import { PasswordGate } from './src/components/PasswordGate';
@@ -87,7 +88,17 @@ function MainApp() {
   const formScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   const { journey, saveJourney, advanceStage, clearJourney } = useJourneyState();
-  const { candidates, loading, error, searchSummary, runOptimization, clearCandidates } = useOptimization();
+  const {
+    candidates,
+    loading,
+    error,
+    searchSummary,
+    tradeoff,
+    walkingLimit,
+    runOptimization,
+    selectWalkingLimit,
+    clearCandidates,
+  } = useOptimization();
 
   const handleFindDropoff = async () => {
     const startEmpty = !driverStartText.trim();
@@ -789,6 +800,13 @@ function MainApp() {
               </TouchableOpacity>
             </View>
             <View style={styles.modalContent}>
+              {walkingLimit !== null && (
+                <WalkingTradeoff
+                  tradeoff={tradeoff}
+                  currentLimit={walkingLimit}
+                  onSelectLimit={selectWalkingLimit}
+                />
+              )}
               <CandidateList
                 candidates={candidates}
                 selectedId={selectedCandidate?.id}

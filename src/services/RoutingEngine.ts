@@ -10,6 +10,7 @@ import {
   TransitRejection,
   TravelMode,
   TripDirection,
+  WalkingTradeoffStep,
 } from "../models";
 import { CONFIG } from "../constants/config";
 import { haversineDistance } from "../utils/distance";
@@ -35,6 +36,12 @@ export interface SearchParams {
 export class RoutingEngine {
   /** Details of the most recent optimize() call */
   lastSearchInfo: SearchInfo | null = null;
+  /** Walk mode: every routed candidate of the last search */
+  lastRouted: CandidatePoint[] = [];
+  /** Walk mode: best driving time at each walking-limit step of the last search */
+  lastTradeoff: WalkingTradeoffStep[] = [];
+  /** Walk mode: the walking limit the returned candidates were picked for */
+  lastWalkingLimit: number | null = null;
 
   constructor(
     private googleMapsService: GoogleMapsService,
@@ -71,6 +78,10 @@ export class RoutingEngine {
     maxConstraint: number,
     departureTime?: Date | null,
   ): Promise<CandidatePoint[]> {
+    this.lastRouted = [];
+    this.lastTradeoff = [];
+    this.lastWalkingLimit = null;
+
     // Step 1: In parallel - transit stops near the passenger, small streets
     // near the passenger (OpenStreetMap) and the driver's normal route
     const transitTypes = ["bus_station", "transit_station"];
@@ -80,7 +91,7 @@ export class RoutingEngine {
         this.googleMapsService.searchNearLocation(
           passengerHome,
           transitTypes,
-          maxConstraint, // Use max walking distance as search radius
+          maxConstraint,
         ),
         this.osmService.fetchStreetNetwork(passengerHome, maxConstraint),
         this.googleMapsService.fetchBaselineRoute(start, end, departureTime),
@@ -143,17 +154,36 @@ export class RoutingEngine {
 
     // Step 3: Pre-filter without API calls - likely within walking range
     // (straight line, with room for the real path being longer), merged,
-    // best estimated detours first, capped for cost
+    // best estimated detours first, capped for cost. Short walks get their own
+    // share, so the trade-off table isn't only far points with small detours.
     const maxStraightLine = maxConstraint * CONFIG.WALK_PREFILTER_RATIO;
-    const preselected = preselectCandidates(
-      [...stopCandidates, ...streetCandidates].filter(
-        (c) => haversineDistance(c.location, passengerHome) <= maxStraightLine,
-      ),
-      start,
-      end,
-      CONFIG.CANDIDATE_MERGE_RADIUS_METERS,
-      CONFIG.MAX_CANDIDATES_TO_EVALUATE,
+    const shortStraightLine =
+      CONFIG.TRADEOFF_SHORT_WALK_METERS * CONFIG.WALK_PREFILTER_RATIO;
+    const straightLine = (c: RawCandidate) =>
+      haversineDistance(c.location, passengerHome);
+    const inRange = [...stopCandidates, ...streetCandidates].filter(
+      (c) => straightLine(c) <= maxStraightLine,
     );
+    const shortWalk =
+      maxConstraint > CONFIG.TRADEOFF_SHORT_WALK_METERS
+        ? preselectCandidates(
+            inRange.filter((c) => straightLine(c) <= shortStraightLine),
+            start,
+            end,
+            CONFIG.CANDIDATE_MERGE_RADIUS_METERS,
+            CONFIG.TRADEOFF_SHORT_WALK_CANDIDATES,
+          )
+        : [];
+    const preselected = [
+      ...shortWalk,
+      ...preselectCandidates(
+        inRange.filter((c) => !shortWalk.includes(c)),
+        start,
+        end,
+        CONFIG.CANDIDATE_MERGE_RADIUS_METERS,
+        CONFIG.MAX_CANDIDATES_TO_EVALUATE,
+      ),
+    ];
 
     const info: SearchInfo = {
       busStops: stopCandidates.length,
@@ -245,22 +275,14 @@ export class RoutingEngine {
       }
     }
 
-    // Step 7: Rank by driving time; near-equal driving times (within
-    // DRIVE_TIME_TIE_SECONDS) are decided by the shorter passenger walk
-    const ranked = rankCandidates(validCandidates, CONFIG.DRIVE_TIME_TIE_SECONDS);
+    // Step 7: Walk/drive trade-off over everything routed; start on the
+    // shortest walk that is about as fast as walking the whole way
+    this.lastRouted = validCandidates;
+    this.lastTradeoff = buildWalkingTradeoff(validCandidates, maxConstraint);
+    this.lastWalkingLimit = suggestWalkingLimit(this.lastTradeoff) ?? maxConstraint;
 
-    // Step 8: Merge candidates within CANDIDATE_MERGE_RADIUS_METERS; keep best per cluster
-    const merged: CandidatePoint[] = [];
-    const mergeRadius = CONFIG.CANDIDATE_MERGE_RADIUS_METERS;
-    for (const c of ranked) {
-      const tooClose = merged.some(
-        (m) => haversineDistance(c.coordinates, m.coordinates) < mergeRadius,
-      );
-      if (!tooClose) merged.push(c);
-    }
-
-    // Step 9: Return top N candidates
-    return merged.slice(0, CONFIG.TOP_CANDIDATES_COUNT);
+    // Step 8: Rank, merge and keep the top N within that walking limit
+    return selectWalkingCandidates(validCandidates, this.lastWalkingLimit);
   }
 
   /**
@@ -464,6 +486,75 @@ export function rankCandidates(
   }
 
   return ranked;
+}
+
+/**
+ * Walk mode: the best candidates within maxWalk. Ranked by driving time;
+ * near-equal driving times (within DRIVE_TIME_TIE_SECONDS) are decided by the
+ * shorter passenger walk. Merged within CANDIDATE_MERGE_RADIUS_METERS (best
+ * per cluster), top TOP_CANDIDATES_COUNT.
+ */
+export function selectWalkingCandidates(
+  routed: CandidatePoint[],
+  maxWalk: number,
+): CandidatePoint[] {
+  const ranked = rankCandidates(
+    routed.filter((c) => c.passengerLeg.distance <= maxWalk),
+    CONFIG.DRIVE_TIME_TIE_SECONDS,
+  );
+
+  const merged: CandidatePoint[] = [];
+  const mergeRadius = CONFIG.CANDIDATE_MERGE_RADIUS_METERS;
+  for (const c of ranked) {
+    const tooClose = merged.some(
+      (m) => haversineDistance(c.coordinates, m.coordinates) < mergeRadius,
+    );
+    if (!tooClose) merged.push(c);
+  }
+
+  return merged.slice(0, CONFIG.TOP_CANDIDATES_COUNT);
+}
+
+/**
+ * The shortest walking limit whose best driving time is within
+ * DRIVE_TIME_TIE_SECONDS of the best with the full walk
+ */
+export function suggestWalkingLimit(
+  tradeoff: WalkingTradeoffStep[],
+): number | null {
+  const times = tradeoff
+    .map((s) => s.bestDriveTime)
+    .filter((t): t is number => t !== null);
+  if (times.length === 0) return null;
+  const fastest = Math.min(...times);
+  const step = tradeoff.find(
+    (s) =>
+      s.bestDriveTime !== null &&
+      s.bestDriveTime <= fastest + CONFIG.DRIVE_TIME_TIE_SECONDS,
+  );
+  return step ? step.maxWalk : null;
+}
+
+/** Best driving time for each walking limit, in TRADEOFF_STEP_METERS steps up to maxRadius (always included) */
+export function buildWalkingTradeoff(
+  routed: CandidatePoint[],
+  maxRadius: number,
+): WalkingTradeoffStep[] {
+  const step = CONFIG.TRADEOFF_STEP_METERS;
+  const steps: WalkingTradeoffStep[] = [];
+  const limits: number[] = [];
+  for (let maxWalk = step; maxWalk < maxRadius; maxWalk += step) limits.push(maxWalk);
+  limits.push(maxRadius);
+  for (const maxWalk of limits) {
+    let best: number | null = null;
+    for (const c of routed) {
+      if (c.passengerLeg.distance <= maxWalk && (best === null || c.totalDetour < best)) {
+        best = c.totalDetour;
+      }
+    }
+    steps.push({ maxWalk, bestDriveTime: best });
+  }
+  return steps;
 }
 
 function plural(count: number, noun: string): string {

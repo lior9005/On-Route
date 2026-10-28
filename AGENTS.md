@@ -76,7 +76,7 @@ Failures degrade instead of breaking: no street data means bus stops only, and t
 
 ## Deploy
 
-Netlify site `on-route` builds from GitHub on every push to the configured branch (`netlify.toml`: build command, publish `dist`, SPA redirect). The site needs the `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` environment variable. Native apps need a new build (for example `eas build -p android`) to pick up code changes.
+Netlify site `on-route` builds from GitHub on every push to the configured branch (`netlify.toml`: build command, publish `dist`, SPA redirect). The site needs the `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` environment variable. Deploy previews are only built for pull requests into `main`, and only when a commit is pushed; changing a PR's base does not start a build. Native apps need a new build (for example `eas build -p android`) to pick up code changes.
 
 ## Testing without network access
 

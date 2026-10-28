@@ -22,7 +22,6 @@ export function WalkingTradeoff({ tradeoff, currentLimit, directDriveTime, selec
   if (!current || current.bestDriveTime === null) {
     return null;
   }
-  const baseline = current.bestDriveTime;
 
   const rows = tradeoff.filter((s, i) => {
     if (!s.best) return false;
@@ -31,20 +30,6 @@ export function WalkingTradeoff({ tradeoff, currentLimit, directDriveTime, selec
     return !prev || prev.best?.id !== s.best.id;
   });
 
-  // First longer walk that saves at least a minute of driving
-  const nextGain = tradeoff.find(
-    (s) =>
-      s.maxWalk > currentLimit &&
-      s.bestDriveTime !== null &&
-      baseline - s.bestDriveTime >= 60,
-  );
-  const lastStep = tradeoff[tradeoff.length - 1];
-  const hint = nextGain
-    ? `Walking ${nextGain.maxWalk - currentLimit}m more saves ${secondsToMinutes(baseline - nextGain.bestDriveTime!)} min of driving`
-    : lastStep && lastStep.maxWalk > currentLimit
-      ? `Walking more than ${currentLimit}m wouldn't save a full minute`
-      : null;
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🚶 Walk more, drive less?</Text>
@@ -52,7 +37,6 @@ export function WalkingTradeoff({ tradeoff, currentLimit, directDriveTime, selec
         Fastest spot for each walking distance. Tap one to preview it.
         {directDriveTime !== null && ` Direct drive without the pickup: ${secondsToMinutes(directDriveTime)} min.`}
       </Text>
-      {hint && <Text style={styles.hint}>{hint}</Text>}
       {rows.map((s) => {
         const best = s.best!;
         const isCurrent = s.maxWalk === currentLimit;
@@ -103,12 +87,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
-    marginBottom: 6,
-  },
-  hint: {
-    fontSize: 13,
-    color: '#1565C0',
-    fontWeight: '600',
     marginBottom: 6,
   },
   row: {

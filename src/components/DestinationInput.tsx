@@ -1,11 +1,20 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { GooglePlacesAutocomplete, GooglePlacesAutocompleteRef } from 'react-native-google-places-autocomplete';
 import * as Location from 'expo-location';
 import type { LocationGeocodedAddress } from 'expo-location';
 import { Coordinates } from '../models';
 import { CONFIG } from '../constants/config';
+import { showAlert } from '../utils/alert';
+import { GoogleMapsService } from '../services/GoogleMapsService';
 
+// Places API (New) supports CORS, so the same endpoint works on native and web
+const PLACES_REQUEST_URL = {
+    url: 'https://places.googleapis.com',
+    useOnPlatform: 'all' as const,
+};
+// Only request the fields we use (keeps Place Details in the cheaper SKU)
+const PLACE_DETAILS_FIELDS = 'id,location,formattedAddress';
 
 function formatGeocodedAddress(addr: LocationGeocodedAddress): string {
     if (addr.formattedAddress) return addr.formattedAddress;
@@ -20,6 +29,31 @@ function formatGeocodedAddress(addr: LocationGeocodedAddress): string {
         addr.country,
     ].filter(Boolean) as string[];
     return parts.join(', ') || 'Current location';
+}
+
+/**
+ * Address for coordinates: Google Geocoding (all platforms), then the device
+ * geocoder on native (not supported on web). Null when neither finds one.
+ */
+async function reverseGeocode(coords: Coordinates): Promise<string | null> {
+    try {
+        const address = await new GoogleMapsService(CONFIG.GOOGLE_MAPS_API_KEY).reverseGeocode(coords);
+        if (address) return address;
+    } catch (err) {
+        console.warn('Google reverse geocoding failed:', err);
+    }
+
+    if (Platform.OS === 'web') return null;
+
+    try {
+        const geocoded = await Location.reverseGeocodeAsync({
+            latitude: coords.lat,
+            longitude: coords.lon,
+        });
+        return geocoded && geocoded[0] ? formatGeocodedAddress(geocoded[0]) : null;
+    } catch {
+        return null;
+    }
 }
 
 interface DestinationInputProps {
@@ -115,7 +149,7 @@ export function DestinationInput({
             const { status } = await Location.requestForegroundPermissionsAsync();
             
             if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Location permission is required to use current location.');
+                showAlert('Permission needed', 'Location permission is required to use current location.');
                 setLoadingLocation(null);
                 return;
             }
@@ -153,31 +187,15 @@ export function DestinationInput({
             };
 
             // Reverse geocode to get address
-            try {
-                const geocoded = await Location.reverseGeocodeAsync({
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                });
-                
-                const addressText = geocoded && geocoded[0] 
-                    ? formatGeocodedAddress(geocoded[0]) 
-                    : 'Current location';
-                
-                onChange(coords, addressText);
-                onTextChange?.(addressText);
-                autocompleteRef?.current?.setAddressText(addressText);
-            } catch (geocodeErr) {
-                // If geocoding fails, still use the coordinates with generic text
-                const addressText = 'Current location';
-                onChange(coords, addressText);
-                onTextChange?.(addressText);
-                autocompleteRef?.current?.setAddressText(addressText);
-            }
+            const addressText = (await reverseGeocode(coords)) ?? 'Current location';
+            onChange(coords, addressText);
+            onTextChange?.(addressText);
+            autocompleteRef?.current?.setAddressText(addressText);
         } catch (err) {
             console.error('Error getting location:', err);
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            Alert.alert(
-                'Error', 
+            showAlert(
+                'Error',
                 `Could not get current location: ${errorMessage}. Please try again or enter address manually.`
             );
         } finally {
@@ -191,12 +209,13 @@ export function DestinationInput({
         details: any | null,
         onChange: (coord: Coordinates | null, text?: string) => void
     ) => {
-        if (details?.geometry?.location) {
+        // Places API (New) details: location.latitude / location.longitude
+        if (details?.location) {
             const coords: Coordinates = {
-                lat: details.geometry.location.lat,
-                lon: details.geometry.location.lng,
+                lat: details.location.latitude,
+                lon: details.location.longitude,
             };
-            const text = details?.formatted_address ?? data?.description ?? '';
+            const text = details?.formattedAddress ?? data?.description ?? '';
             onChange(coords, text);
         }
     };
@@ -217,8 +236,14 @@ export function DestinationInput({
                     }}
                     query={{
                         key: CONFIG.GOOGLE_MAPS_API_KEY,
-                        language: 'en',
+                        languageCode: 'en',
                     }}
+                    isNewPlacesAPI={true}
+                    requestUrl={PLACES_REQUEST_URL}
+                    fields={PLACE_DETAILS_FIELDS}
+                    // Inside the form's ScrollView: no nested scrolling, taps work with the keyboard open
+                    disableScroll={true}
+                    keyboardShouldPersistTaps="handled"
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidDriverStart && styles.autocompleteInputInvalid],
@@ -261,8 +286,14 @@ export function DestinationInput({
                     }}
                     query={{
                         key: CONFIG.GOOGLE_MAPS_API_KEY,
-                        language: 'en',
+                        languageCode: 'en',
                     }}
+                    isNewPlacesAPI={true}
+                    requestUrl={PLACES_REQUEST_URL}
+                    fields={PLACE_DETAILS_FIELDS}
+                    // Inside the form's ScrollView: no nested scrolling, taps work with the keyboard open
+                    disableScroll={true}
+                    keyboardShouldPersistTaps="handled"
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidDriverDestination && styles.autocompleteInputInvalid],
@@ -305,8 +336,14 @@ export function DestinationInput({
                     }}
                     query={{
                         key: CONFIG.GOOGLE_MAPS_API_KEY,
-                        language: 'en',
+                        languageCode: 'en',
                     }}
+                    isNewPlacesAPI={true}
+                    requestUrl={PLACES_REQUEST_URL}
+                    fields={PLACE_DETAILS_FIELDS}
+                    // Inside the form's ScrollView: no nested scrolling, taps work with the keyboard open
+                    disableScroll={true}
+                    keyboardShouldPersistTaps="handled"
                     styles={{
                         container: styles.autocompleteContainer,
                         textInput: [styles.autocompleteInput, invalidPassengerHome && styles.autocompleteInputInvalid],
@@ -413,5 +450,8 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
         maxHeight: 200,
+        // On web the result list's ScrollView shrinks to 0 height inside the
+        // auto-height container, hiding the suggestions
+        ...(Platform.OS === 'web' ? { flexShrink: 0 } : null),
     },
 });

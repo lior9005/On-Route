@@ -1,14 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Modal, Dimensions, Animated, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { DestinationInput } from './src/components/DestinationInput';
-import { MaxWalkingSlider } from './src/components/MaxWalkingSlider';
+import { MaxWalkingSlider, MaxDetourSlider } from './src/components/MaxWalkingSlider';
+import { SegmentedControl } from './src/components/SegmentedControl';
+import { DepartureTimePicker } from './src/components/DepartureTimePicker';
+import { PasswordGate } from './src/components/PasswordGate';
 import { CandidateList } from './src/components/CandidateList';
+import { SearchingIndicator } from './src/components/SearchingIndicator';
 import { RoutePreviewScreen } from './src/screens/RoutePreviewScreen';
 import { useJourneyState } from './src/hooks/useJourneyState';
 import { useOptimization } from './src/hooks/useOptimization';
-import { Coordinates, CandidatePoint } from './src/models';
+import { Coordinates, CandidatePoint, TravelMode, TripDirection } from './src/models';
 import { CONFIG } from './src/constants/config';
+import { showAlert } from './src/utils/alert';
+import { meetingPointTerm } from './src/utils/transitText';
 
 function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
   useEffect(() => {
@@ -35,6 +41,14 @@ function HomeScreenCarLoop({ carAnim }: { carAnim: Animated.Value }) {
 }
 
 export default function App() {
+  return (
+    <PasswordGate>
+      <MainApp />
+    </PasswordGate>
+  );
+}
+
+function MainApp() {
   const [driverStart, setDriverStart] = useState<Coordinates | null>(null);
   const [driverDestination, setDriverDestination] = useState<Coordinates | null>(null);
   const [passengerHome, setPassengerHome] = useState<Coordinates | null>(null);
@@ -42,6 +56,12 @@ export default function App() {
   const [driverDestinationText, setDriverDestinationText] = useState<string>('');
   const [passengerHomeText, setPassengerHomeText] = useState<string>('');
   const [maxWalkingDistance, setMaxWalkingDistance] = useState<number>(CONFIG.DEFAULT_WALKING_DISTANCE);
+  const [travelMode, setTravelMode] = useState<TravelMode>('WALK');
+  const [tripDirection, setTripDirection] = useState<TripDirection>('DROP_OFF');
+  const [maxDetourMinutes, setMaxDetourMinutes] = useState<number>(CONFIG.DEFAULT_MAX_DETOUR_MINUTES);
+  const [departureTime, setDepartureTime] = useState<Date | null>(null); // null = leave now
+  // "Drop-off Location" / "Pick-up Location" in bus mode, "Drop/Pick Location" when walking
+  const formPlace = meetingPointTerm(travelMode === 'BUS' ? tripDirection : undefined);
   const [selectedCandidate, setSelectedCandidate] = useState<CandidatePoint | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showCandidatesModal, setShowCandidatesModal] = useState(false);
@@ -67,7 +87,7 @@ export default function App() {
   const formScaleAnim = useRef(new Animated.Value(0.9)).current;
 
   const { journey, saveJourney, advanceStage, clearJourney } = useJourneyState();
-  const { candidates, loading, error, runOptimization, clearCandidates } = useOptimization();
+  const { candidates, loading, error, searchSummary, runOptimization, clearCandidates } = useOptimization();
 
   const handleFindDropoff = async () => {
     const startEmpty = !driverStartText.trim();
@@ -78,7 +98,11 @@ export default function App() {
       return;
     }
     if (!driverStart || !driverDestination || !passengerHome) {
-      Alert.alert('Missing Information', 'Please enter all three locations');
+      showAlert('Missing Information', 'Please enter all three locations');
+      return;
+    }
+    if (departureTime && departureTime.getTime() <= Date.now()) {
+      showAlert('Departure time passed', 'Pick a later time, or choose "Leave now".');
       return;
     }
     setShowValidationErrors(false);
@@ -87,7 +111,11 @@ export default function App() {
       start: driverStart,
       end: driverDestination,
       passengerHome,
+      mode: travelMode,
       maxWalkingDistance,
+      direction: tripDirection,
+      maxDetourMinutes,
+      departureTime,
     });
   };
 
@@ -392,7 +420,7 @@ export default function App() {
           
           <View style={styles.journeyMessageCard}>
             <Text style={styles.journeyBody}>
-              🗺️ You're en route to the drop/pick location.
+              🗺️ You're en route to the {meetingPointTerm(journey?.selectedDropoff?.direction).toLowerCase()}.
             </Text>
             <Text style={styles.journeyBody}>
               ✅ When you arrive, press the button below to navigate to your final destination.
@@ -600,6 +628,15 @@ export default function App() {
       />
 
       <SafeAreaView style={styles.formSafeArea}>
+        <KeyboardAvoidingView
+          style={styles.formSafeArea}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+        <ScrollView
+          contentContainerStyle={styles.formScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <Animated.View 
           style={[
             styles.formContent,
@@ -639,10 +676,58 @@ export default function App() {
               onPassengerHomeTextChange={setPassengerHomeText}
             />
 
-          <MaxWalkingSlider
-            value={maxWalkingDistance}
-            onValueChange={(value) => setMaxWalkingDistance(value)}
+          <View style={styles.rideOptionsHeader}>
+            <Text style={styles.rideOptionsTitle}>RIDE OPTIONS</Text>
+            <View style={styles.rideOptionsLine} />
+          </View>
+
+          <DepartureTimePicker
+            value={departureTime}
+            onChange={(value) => {
+              setDepartureTime(value);
+              clearCandidates();
+            }}
           />
+
+          <SegmentedControl<TravelMode>
+            label="Passenger travels by"
+            options={[
+              { value: 'WALK', label: '🚶 Walking' },
+              { value: 'BUS', label: '🚌 Bus' },
+            ]}
+            value={travelMode}
+            onChange={(mode) => {
+              setTravelMode(mode);
+              clearCandidates();
+            }}
+          />
+
+          {travelMode === 'BUS' && (
+            <SegmentedControl<TripDirection>
+              label="Trip"
+              options={[
+                { value: 'DROP_OFF', label: 'Drop-off' },
+                { value: 'PICK_UP', label: 'Pick-up' },
+              ]}
+              value={tripDirection}
+              onChange={(direction) => {
+                setTripDirection(direction);
+                clearCandidates();
+              }}
+            />
+          )}
+
+          {travelMode === 'WALK' ? (
+            <MaxWalkingSlider
+              value={maxWalkingDistance}
+              onValueChange={(value) => setMaxWalkingDistance(value)}
+            />
+          ) : (
+            <MaxDetourSlider
+              value={maxDetourMinutes}
+              onValueChange={(value) => setMaxDetourMinutes(value)}
+            />
+          )}
 
             <TouchableOpacity
               style={[styles.formButton, loading && styles.formButtonDisabled]}
@@ -651,11 +736,11 @@ export default function App() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <SearchingIndicator mode={travelMode} />
               ) : (
                 <View style={styles.formButtonContent}>
                   <Text style={styles.formButtonIcon}>🔍</Text>
-                  <Text style={styles.formButtonText} numberOfLines={1}>Find Drop/Pick Location</Text>
+                  <Text style={styles.formButtonText} numberOfLines={1}>Find {formPlace}</Text>
                 </View>
               )}
               <View style={styles.formButtonShadow} />
@@ -668,6 +753,8 @@ export default function App() {
             )}
           </View>
         </Animated.View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
 
       <StatusBar style="auto" />
@@ -688,8 +775,11 @@ export default function App() {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderText}>
-                <Text style={styles.modalTitle}>Select Drop/Pick Location</Text>
+                <Text style={styles.modalTitle}>Select {formPlace}</Text>
                 <Text style={styles.modalSubtitle}>{candidates.length} options found</Text>
+                {searchSummary && (
+                  <Text style={styles.searchSummary}>{searchSummary}</Text>
+                )}
               </View>
               <TouchableOpacity 
                 style={styles.closeButton}
@@ -751,8 +841,11 @@ const styles = StyleSheet.create({
   formSafeArea: {
     flex: 1,
   },
+  formScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
   formContent: {
-    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 80,
     marginTop: 0,
@@ -777,6 +870,24 @@ const styles = StyleSheet.create({
     color: '#B0BEC5',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  rideOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  rideOptionsTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#8A96A3',
+    letterSpacing: 1.2,
+    marginRight: 10,
+  },
+  rideOptionsLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E6EAF0',
   },
   formCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.98)',
@@ -804,7 +915,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   formButtonDisabled: {
-    backgroundColor: '#90CAF9',
+    backgroundColor: '#1976D2', // Searching: darker, keeps the animation readable
   },
   formButtonContent: {
     flexDirection: 'row',
@@ -897,6 +1008,11 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 14,
     color: '#666',
+  },
+  searchSummary: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
   },
   closeButton: {
     width: 32,

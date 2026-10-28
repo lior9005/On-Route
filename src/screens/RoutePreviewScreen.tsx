@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Animated, Dimensions, Share } from 'react-native';
-import MapView, { Polyline, Marker } from 'react-native-maps';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Animated, Dimensions, Share, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { CandidatePoint, Coordinates } from '../models';
-import { decodePolyline } from '../utils/polylineDecoder';
-import { CONFIG } from '../constants/config';
+import { RouteMap } from '../components/RouteMap';
+import { meetingPointLabel } from '../components/CandidateList';
+import { RouteLoading } from '../components/RouteLoading';
+import { describeBusTrip, meetingPointTerm } from '../utils/transitText';
 import { useRouteVisualization } from '../hooks/useRouteVisualization';
 import { WazeService } from '../services/WazeService';
+import { showAlert } from '../utils/alert';
 import { secondsToMinutes, metersToKilometers } from '../utils/distance';
 
 interface RoutePreviewScreenProps {
@@ -26,6 +28,9 @@ export function RoutePreviewScreen({
   onBack,
 }: RoutePreviewScreenProps) {
   const { visualization, loading, error, fetchVisualization } = useRouteVisualization();
+  const busTrip = describeBusTrip(candidate);
+  const { height: windowHeight } = useWindowDimensions();
+  const place = meetingPointTerm(candidate.direction);
   const [showTransferInstructions, setShowTransferInstructions] = useState(false);
   
   // Animation values for the Waze screen
@@ -113,8 +118,15 @@ export function RoutePreviewScreen({
   const handleShareLocation = async () => {
     try {
       const locationUrl = `https://www.google.com/maps/search/?api=1&query=${candidate.coordinates.lat},${candidate.coordinates.lon}`;
-      const message = `📍 Meeting Point: ${candidate.name || 'Drop/Pick Location'}\n\nLocation: ${locationUrl}`;
+      const message = `📍 ${place}: ${candidate.name || place}\n\nLocation: ${locationUrl}`;
       
+      // Web: use the Web Share API when available, otherwise copy to clipboard
+      if (Platform.OS === 'web' && !(navigator as any).share) {
+        await navigator.clipboard.writeText(message);
+        showAlert('Copied', 'Meeting point link copied to clipboard');
+        return;
+      }
+
       await Share.share({
         message,
         title: 'Meeting Point Location',
@@ -126,10 +138,10 @@ export function RoutePreviewScreen({
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" style={styles.loader} />
-        <Text>Loading route preview...</Text>
-      </View>
+      <RouteLoading
+        meetingPointName={meetingPointLabel(candidate)}
+        mode={candidate.passengerLeg.mode === 'TRANSIT' ? 'BUS' : 'WALK'}
+      />
     );
   }
 
@@ -214,7 +226,7 @@ export function RoutePreviewScreen({
           
           <View style={styles.messageCard}>
             <Text style={styles.transferBody}>
-              🗺️ You'll be transferred to Waze for navigation to the drop/pick location.
+              🗺️ You'll be transferred to Waze for navigation to the {place.toLowerCase()}.
             </Text>
             <Text style={styles.transferBody}>
               ✅ When you arrive, return to this app and tap "Navigate to Driver Destination" to continue.
@@ -255,67 +267,23 @@ export function RoutePreviewScreen({
     );
   }
 
-  // Calculate map region with padding
-  const { northeast, southwest } = visualization.bounds;
-  const latDelta = (northeast.lat - southwest.lat) * (1 + CONFIG.MAP_PADDING);
-  const lonDelta = (northeast.lon - southwest.lon) * (1 + CONFIG.MAP_PADDING);
-  const centerLat = (northeast.lat + southwest.lat) / 2;
-  const centerLon = (northeast.lon + southwest.lon) / 2;
-
   return (
     <View style={styles.container}>
-      <MapView
+      <RouteMap
         style={styles.map}
-        initialRegion={{
-          latitude: centerLat,
-          longitude: centerLon,
-          latitudeDelta: latDelta,
-          longitudeDelta: lonDelta,
-        }}
-      >
-        {/* Render polylines for each route segment */}
-        {visualization.segments.map((segment, index) => {
-          const coordinates = decodePolyline(segment.polyline);
-          return (
-            <Polyline
-              key={index}
-              coordinates={coordinates}
-              strokeColor={segment.color}
-              strokeWidth={CONFIG.POLYLINE_WIDTH}
-              lineDashPattern={segment.label.includes('Walking') ? [5, 5] : undefined}
-            />
-          );
-        })}
-
-        {/* Native default pins - stable, full shape, no blinking */}
-        <Marker
-          coordinate={{ latitude: startPoint.lat, longitude: startPoint.lon }}
-          title="🚗 Your Starting Point"
-          description="You start here"
-          pinColor="#4285F4"
-        />
-        <Marker
-          coordinate={{ latitude: candidate.coordinates.lat, longitude: candidate.coordinates.lon }}
-          title={`🤝 ${candidate.name || 'Drop/Pick Location'}`}
-          description="Pick/drop passenger here"
-          pinColor="#E91E63"
-        />
-        <Marker
-          coordinate={{ latitude: endPoint.lat, longitude: endPoint.lon }}
-          title="🎯 Your Destination"
-          description="Your final destination"
-          pinColor="#34A853"
-        />
-        <Marker
-          coordinate={{ latitude: passengerHome.lat, longitude: passengerHome.lon }}
-          title="🚶 Passenger start/end of trip"
-          description="Where passenger starts or ends trip"
-          pinColor="#FF9800"
-        />
-      </MapView>
+        visualization={visualization}
+        candidate={candidate}
+        startPoint={startPoint}
+        endPoint={endPoint}
+        passengerHome={passengerHome}
+      />
 
       {/* Route Summary Card */}
-      <View style={styles.summaryCard}>
+      {/* At most half the screen, so the map stays visible; long bus summaries scroll */}
+      <ScrollView
+        style={[styles.summaryCard, { maxHeight: windowHeight * 0.5 }]}
+        contentContainerStyle={styles.summaryContent}
+      >
         <View style={styles.summaryHeader}>
           <Text style={styles.summaryTitle}>Route Summary</Text>
           <TouchableOpacity 
@@ -327,35 +295,49 @@ export function RoutePreviewScreen({
           </TouchableOpacity>
         </View>
         <Text style={styles.dropoffName}>
-          Drop/Pick Location: {candidate.name || 'Transit Station'}
+          {place}: {meetingPointLabel(candidate)}
         </Text>
         
         <View style={styles.routeSegment}>
-          <Text style={styles.segmentLabel}>🚗 Your Location → Drop/Pick Location</Text>
+          <Text style={styles.segmentLabel}>🚗 Driver Starting Location → {place}</Text>
           <Text style={styles.segmentDetails}>
             {secondsToMinutes(candidate.leg1.duration)} min • {metersToKilometers(candidate.leg1.distance).toFixed(1)} km
           </Text>
         </View>
         
         <View style={styles.routeSegment}>
-          <Text style={styles.segmentLabel}>🚗 Drop/Pick Location → Destination</Text>
+          <Text style={styles.segmentLabel}>🚗 {place} → Destination</Text>
           <Text style={styles.segmentDetails}>
             {secondsToMinutes(candidate.leg2.duration)} min • {metersToKilometers(candidate.leg2.distance).toFixed(1)} km
           </Text>
         </View>
         
-        <View style={styles.routeSegment}>
-          <Text style={styles.segmentLabel}>🚶 Passenger Walk</Text>
-          <Text style={styles.segmentDetails}>
-            {secondsToMinutes(candidate.passengerLeg.duration)} min • {metersToKilometers(candidate.passengerLeg.distance).toFixed(1)} km
-          </Text>
-        </View>
+        {busTrip ? (
+          <View style={styles.routeSegment}>
+            <Text style={styles.segmentLabel}>{busTrip.title}</Text>
+            {busTrip.lines.map((line) => (
+              <Text key={line} style={styles.segmentDetails}>{line}</Text>
+            ))}
+            {!!candidate.driverWaitSeconds && (
+              <Text style={styles.segmentDetails}>
+                ⏳ Driver waits {secondsToMinutes(candidate.driverWaitSeconds)} min at the stop
+              </Text>
+            )}
+          </View>
+        ) : (
+          <View style={styles.routeSegment}>
+            <Text style={styles.segmentLabel}>🚶 Passenger Walk</Text>
+            <Text style={styles.segmentDetails}>
+              {secondsToMinutes(candidate.passengerLeg.duration)} min • {metersToKilometers(candidate.passengerLeg.distance).toFixed(1)} km
+            </Text>
+          </View>
+        )}
         
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total Driving Time:</Text>
           <Text style={styles.totalValue}>{secondsToMinutes(candidate.totalDetour)} min</Text>
         </View>
-      </View>
+      </ScrollView>
 
       {/* Action Buttons */}
       <View style={styles.actions}>
@@ -374,9 +356,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  loader: {
-    marginTop: 100,
-  },
   error: {
     color: 'red',
     textAlign: 'center',
@@ -387,9 +366,12 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     backgroundColor: '#fff',
-    padding: 16,
+    flexGrow: 0,
     borderTopWidth: 1,
     borderTopColor: '#eee',
+  },
+  summaryContent: {
+    padding: 16,
   },
   summaryHeader: {
     flexDirection: 'row',

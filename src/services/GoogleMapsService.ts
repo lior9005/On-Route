@@ -548,6 +548,7 @@ export class GoogleMapsService {
       },
       body: JSON.stringify({
         includedTypes: types,
+        languageCode: CONFIG.WALK_NAMES_LANGUAGE,
         maxResultCount: 20, // API maximum, no pagination
         locationRestriction: {
           circle: {

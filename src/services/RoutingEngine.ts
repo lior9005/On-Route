@@ -15,6 +15,7 @@ import {
 import { CONFIG } from "../constants/config";
 import { haversineDistance } from "../utils/distance";
 import { decodePolyline } from "../utils/polylineDecoder";
+import { encodePolyline, routeSectionNear } from "../utils/routeSection";
 import {
   buildStreetCandidates,
   closestRouteCandidate,
@@ -345,7 +346,19 @@ export class RoutingEngine {
       departureTime,
     );
 
-    // Step 2: Bus stops along that route
+    // Step 2: Bus stops along the part of that route near the passenger
+    const routeNearPassenger = routeSectionNear(
+      decodePolyline(baseline.polyline).map((p) => ({
+        lat: p.latitude,
+        lon: p.longitude,
+      })),
+      passengerHome,
+      CONFIG.BUS_STOP_SEARCH_RADIUS_METERS,
+    );
+    const searchPolyline =
+      routeNearPassenger.length >= 2
+        ? encodePolyline(routeNearPassenger)
+        : baseline.polyline;
     const info: SearchInfo = {
       busStops: 0,
       streetPoints: 0,
@@ -364,7 +377,7 @@ export class RoutingEngine {
     try {
       stops = (
         await this.googleMapsService.searchBusStopsAlongRoute(
-          baseline.polyline,
+          searchPolyline,
           CONFIG.BUS_STOP_SEARCH_PAGES,
         )
       ).map((place) => ({

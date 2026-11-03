@@ -48,6 +48,12 @@ export const CONFIG = {
   MIN_DETOUR_MINUTES: 2,
   MAX_DETOUR_MINUTES: 20,
   BUS_STOP_SEARCH_PAGES: 2, // Text Search along the route, 20 stops per page
+  /**
+   * Only search the part of the driver's route within this distance of the
+   * passenger: on a long route Google's 40 results otherwise land near the
+   * two ends, far beyond a 40 min bus ride
+   */
+  BUS_STOP_SEARCH_RADIUS_METERS: 20000,
   // Pre-selection estimates (straight-line based, no API calls)
   DETOUR_ESTIMATE_SPEED_MPS: 8, // ~30 km/h city driving
   BUS_ESTIMATE_SPEED_MPS: 5, // ~18 km/h bus incl. stops

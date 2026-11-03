@@ -53,7 +53,7 @@ The web app calls every API directly from the browser, so each one must allow CO
 
 ## Meeting point search: bus mode (RoutingEngine.optimizeTransit)
 
-The form has a **Leave now / Plan a ride** switch (`DepartureTimePicker`: next 7 days, 15-minute steps). A planned time is passed as `departureTime` to every DRIVE request, for predicted traffic, and is the base for the bus timings. The map preview's route request still uses "now", since it only draws lines.
+The form has a **Leave now / Plan a ride** switch (`DepartureTimePicker`: next 7 days, 15-minute steps). A planned time is passed as `departureTime` to every DRIVE request, for predicted traffic, and is the base for the bus timings. The map preview's route request still uses "now", since it only draws lines. It uses `TRAFFIC_AWARE_OPTIMAL`, like the Google Maps app.
 
 The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch and a "Max extra driving" slider.
 

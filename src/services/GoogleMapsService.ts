@@ -291,8 +291,8 @@ export class GoogleMapsService {
       | Array<{ kind: "WALK" | "BUS"; polyline: string }>
       | undefined;
 
-    // Fetch the detour route with per-leg polylines (with traffic at the
-    // planned time, same as the search)
+    // Fetch the detour route with per-leg polylines (full traffic model at
+    // the planned time, as in the Google Maps app)
     // and, for walking candidates, the walking route to the passenger in parallel
     const [detourRoute, walkingRoute] = await Promise.all([
       this.computeRoute(
@@ -303,6 +303,8 @@ export class GoogleMapsService {
         "routes.legs.polyline.encodedPolyline",
         "Failed to fetch route visualization",
         departureTime,
+        true,
+        true,
       ),
       transitSegments
         ? Promise.resolve(null)

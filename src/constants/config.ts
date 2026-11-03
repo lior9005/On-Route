@@ -54,13 +54,6 @@ export const CONFIG = {
    * two ends, far beyond a 40 min bus ride
    */
   BUS_STOP_SEARCH_RADIUS_METERS: 20000,
-  /**
-   * Also look for stations around the passenger (one Nearby Search, 20
-   * results, most prominent first): hubs off the driver's route, like Tel
-   * Aviv Savidor for a Route 6 drive, never show up in the search along it
-   */
-  TRANSIT_HUB_SEARCH_RADIUS_METERS: 5000,
-  TRANSIT_HUB_TYPES: ["bus_station", "transit_station"],
   // Pre-selection estimates (straight-line based, no API calls)
   DETOUR_ESTIMATE_SPEED_MPS: 8, // ~30 km/h city driving
   BUS_ESTIMATE_SPEED_MPS: 5, // ~18 km/h bus incl. stops

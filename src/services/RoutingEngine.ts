@@ -348,8 +348,7 @@ export class RoutingEngine {
     );
     const baseline = driveRoutes[0];
 
-    // Step 2: Bus stops along the part of each route near the passenger,
-    // plus stations around the passenger
+    // Step 2: Bus stops along the part of each route near the passenger
     const info: SearchInfo = {
       busStops: 0,
       streetPoints: 0,
@@ -379,21 +378,15 @@ export class RoutingEngine {
         : route.polyline;
     });
 
-    const searches = await Promise.allSettled([
-      ...searchPolylines.map((polyline) =>
+    const searches = await Promise.allSettled(
+      searchPolylines.map((polyline) =>
         this.googleMapsService.searchBusStopsAlongRoute(
           polyline,
           CONFIG.BUS_STOP_SEARCH_PAGES,
         ),
       ),
-      // Stations near the passenger, which may be off every route
-      this.googleMapsService.searchNearLocation(
-        passengerHome,
-        [...CONFIG.TRANSIT_HUB_TYPES],
-        CONFIG.TRANSIT_HUB_SEARCH_RADIUS_METERS,
-      ),
-    ]);
-    // Fail only if every search failed
+    );
+    // Fail only if every route's search failed
     if (searches.every((r) => r.status === "rejected")) {
       const err = (searches[0] as PromiseRejectedResult).reason;
       info.busStopError = errorText(err);
@@ -704,7 +697,7 @@ const TRANSIT_REJECTION_TEXT: Record<TransitRejection, string> = {
 };
 
 /**
- * Bus mode summary, e.g. "Found 32 bus stops along 3 driving routes and near the passenger; compared the best 15 (6 no direct bus)"
+ * Bus mode summary, e.g. "Found 32 bus stops along 3 driving routes; compared the best 15 (6 no direct bus)"
  */
 function describeTransitSearch(info: SearchInfo): string {
   const dropped = (Object.keys(TRANSIT_REJECTION_TEXT) as TransitRejection[])
@@ -715,7 +708,6 @@ function describeTransitSearch(info: SearchInfo): string {
   return (
     `Found ${plural(info.busStops, "bus stop")} along ` +
     ((info.driveRoutes ?? 1) > 1 ? `${info.driveRoutes} driving routes` : "the route") +
-    " and near the passenger" +
     `; compared the best ${info.evaluated}` +
     (dropped.length ? ` (${dropped.join(", ")})` : "")
   );

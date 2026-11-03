@@ -85,6 +85,7 @@ export class GoogleMapsService {
     start: Coordinates,
     end: Coordinates,
     departureTime?: Date | null,
+    optimal = false,
   ): Promise<BaselineRoute> {
     const route = await this.computeRoute(
       start,
@@ -94,6 +95,8 @@ export class GoogleMapsService {
       "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
       "Failed to fetch baseline route",
       departureTime,
+      true,
+      optimal,
     );
 
     return this.toBaselineRoute(route);
@@ -383,6 +386,8 @@ export class GoogleMapsService {
     end: Coordinates,
     departureTime?: Date | null,
     trafficAware = true,
+    /** Full traffic model (TRAFFIC_AWARE_OPTIMAL, Enterprise billing) */
+    optimal = false,
   ): Promise<DetourRoute> {
     const route = await this.computeRoute(
       start,
@@ -393,6 +398,7 @@ export class GoogleMapsService {
       "Failed to compute detour route",
       departureTime,
       trafficAware,
+      optimal,
     );
 
     const legs = route.legs ?? [];
@@ -478,6 +484,7 @@ export class GoogleMapsService {
     errorMessage: string,
     departureTime?: Date | null,
     trafficAware = true,
+    optimal = false,
   ): Promise<RoutesApiRoute> {
     const routes = await this.computeRoutes(
       origin,
@@ -488,6 +495,8 @@ export class GoogleMapsService {
       errorMessage,
       departureTime,
       trafficAware,
+      false,
+      optimal,
     );
     return routes[0];
   }

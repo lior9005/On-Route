@@ -95,7 +95,9 @@ export class RoutingEngine {
           maxConstraint,
         ),
         this.osmService.fetchStreetNetwork(passengerHome, maxConstraint),
-        this.googleMapsService.fetchBaselineRoute(start, end, departureTime),
+        // Full traffic model, like the finalists' routes in step 7, so the
+        // time added vs. the direct drive compares like with like
+        this.googleMapsService.fetchBaselineRoute(start, end, departureTime, true),
       ]);
 
     if (
@@ -287,7 +289,8 @@ export class RoutingEngine {
       }
     }
 
-    // Step 7: Re-route only the finalists with traffic; everything below
+    // Step 7: Re-route only the finalists with the full traffic model
+    // (TRAFFIC_AWARE_OPTIMAL, as in the Google Maps app); everything below
     // compares traffic times only (keep the estimates if none come back)
     const finalists = pickTrafficFinalists(validCandidates, maxConstraint);
     const trafficResults = await Promise.allSettled(
@@ -297,6 +300,8 @@ export class RoutingEngine {
           c.coordinates,
           end,
           departureTime,
+          true,
+          true,
         );
         const totalDetour =
           detourRoute.leg1.duration + detourRoute.leg2.duration;

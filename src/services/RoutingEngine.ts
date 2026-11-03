@@ -340,13 +340,13 @@ export class RoutingEngine {
     const leaveAt = departureTime ? departureTime.getTime() : Date.now();
 
     // Step 1: The driver's possible routes (Google's main route and its
-    // alternatives); the fastest is the baseline for extra driving
-    const driveRoutes = await this.googleMapsService.fetchDriveRoutes(
-      start,
-      end,
-      departureTime,
-    );
-    const baseline = driveRoutes[0];
+    // alternatives, full traffic model), and the direct drive time with the
+    // same traffic model as the detour routes, so extra driving compares
+    // like with like
+    const [driveRoutes, baseline] = await Promise.all([
+      this.googleMapsService.fetchDriveRoutes(start, end, departureTime),
+      this.googleMapsService.fetchBaselineRoute(start, end, departureTime),
+    ]);
 
     // Step 2: Bus stops along the part of each route near the passenger
     const info: SearchInfo = {

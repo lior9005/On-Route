@@ -101,7 +101,9 @@ export class GoogleMapsService {
 
   /**
    * The driver's possible routes from start to end: Google's main route plus
-   * its alternatives (up to 3 in all), fastest first
+   * its alternatives (up to 3 in all), fastest first. Uses the full traffic
+   * model (TRAFFIC_AWARE_OPTIMAL, Enterprise billing): the simplified
+   * TRAFFIC_AWARE model left out e.g. the Ayalon route for Hadera → Eilat
    */
   async fetchDriveRoutes(
     start: Coordinates,
@@ -116,6 +118,7 @@ export class GoogleMapsService {
       "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
       "Failed to fetch baseline route",
       departureTime,
+      true,
       true,
       true,
     );
@@ -503,6 +506,8 @@ export class GoogleMapsService {
     departureTime?: Date | null,
     trafficAware = true,
     alternatives = false,
+    /** Full traffic model, as in the Google Maps app: finds more alternatives, billed higher */
+    optimal = false,
   ): Promise<RoutesApiRoute[]> {
     const toWaypoint = (c: Coordinates) => ({
       location: { latLng: { latitude: c.lat, longitude: c.lon } },
@@ -527,7 +532,7 @@ export class GoogleMapsService {
     if (travelMode === "DRIVE" && !trafficAware) {
       body.routingPreference = "TRAFFIC_UNAWARE";
     } else if (travelMode === "DRIVE") {
-      body.routingPreference = "TRAFFIC_AWARE";
+      body.routingPreference = optimal ? "TRAFFIC_AWARE_OPTIMAL" : "TRAFFIC_AWARE";
       // Planned rides: predicted traffic at that time (must be in the future)
       if (departureTime && departureTime.getTime() > Date.now() + 60_000) {
         body.departureTime = departureTime.toISOString();

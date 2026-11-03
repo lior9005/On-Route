@@ -57,7 +57,7 @@ The form has a **Leave now / Plan a ride** switch (`DepartureTimePicker`: next 7
 
 The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch and a "Max extra driving" slider.
 
-1. Fetch the driver's routes A→C (`fetchDriveRoutes`: Google's route plus its alternatives, up to 3; the fastest is the baseline for extra driving), then the bus stops along the part of each within 20 km of the passenger (`routeSectionNear`, `BUS_STOP_SEARCH_RADIUS_METERS`): Places Text Search with `searchAlongRouteParameters` and `includedType: bus_stop`, falling back to `transit_station`, merged by place id. Searching the whole route of a long trip (Hadera→Eilat) returns stops only near its two ends.
+1. Fetch the driver's routes A→C (`fetchDriveRoutes`: Google's route plus its alternatives, up to 3, with `TRAFFIC_AWARE_OPTIMAL` like the Google Maps app, since plain `TRAFFIC_AWARE` skipped the Ayalon route for Hadera→Eilat; the fastest is the baseline for extra driving), then the bus stops along the part of each within 20 km of the passenger (`routeSectionNear`, `BUS_STOP_SEARCH_RADIUS_METERS`): Places Text Search with `searchAlongRouteParameters` and `includedType: bus_stop`, falling back to `transit_station`, merged by place id. Searching the whole route of a long trip (Hadera→Eilat) returns stops only near its two ends.
 2. Pre-select the 15 stops with the best estimated extra driving + bus time (straight-line estimates), skipping stops clearly over the detour budget.
 3. For each stop, compute the detour route A→stop→C and drop it if the extra driving is over the slider value. The leg-1 duration gives the meeting time T.
 4. Bus trip: Routes API `TRANSIT` with bus only, `FEWER_TRANSFERS` and alternatives.

@@ -65,6 +65,8 @@ export interface SearchInfo {
   tooFarToWalk: number;
   movedToOtherRoad: number;
   routeErrors: number;
+  /** Bus mode: how many driving routes were searched for stops */
+  driveRoutes?: number;
   /** Bus mode: why candidates were dropped (reason -> count) */
   transitRejections?: Partial<Record<TransitRejection, number>>;
 }

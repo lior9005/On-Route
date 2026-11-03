@@ -96,6 +96,36 @@ export class GoogleMapsService {
       departureTime,
     );
 
+    return this.toBaselineRoute(route);
+  }
+
+  /**
+   * The driver's possible routes from start to end: Google's main route plus
+   * its alternatives (up to 3 in all), fastest first
+   */
+  async fetchDriveRoutes(
+    start: Coordinates,
+    end: Coordinates,
+    departureTime?: Date | null,
+  ): Promise<BaselineRoute[]> {
+    const routes = await this.computeRoutes(
+      start,
+      end,
+      [],
+      "DRIVE",
+      "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+      "Failed to fetch baseline route",
+      departureTime,
+      true,
+      true,
+    );
+    return routes
+      .map((r) => this.toBaselineRoute(r))
+      .filter((r) => r.polyline)
+      .sort((a, b) => a.duration - b.duration);
+  }
+
+  private toBaselineRoute(route: RoutesApiRoute): BaselineRoute {
     return {
       polyline: route.polyline?.encodedPolyline ?? "",
       duration: this.parseDuration(route.duration),
@@ -446,6 +476,34 @@ export class GoogleMapsService {
     departureTime?: Date | null,
     trafficAware = true,
   ): Promise<RoutesApiRoute> {
+    const routes = await this.computeRoutes(
+      origin,
+      destination,
+      intermediates,
+      travelMode,
+      fieldMask,
+      errorMessage,
+      departureTime,
+      trafficAware,
+    );
+    return routes[0];
+  }
+
+  /**
+   * Compute routes via the Routes API (computeRoutes); with `alternatives`,
+   * Google may add up to two alternative routes (not with intermediates)
+   */
+  private async computeRoutes(
+    origin: Coordinates,
+    destination: Coordinates,
+    intermediates: Coordinates[],
+    travelMode: TravelMode,
+    fieldMask: string,
+    errorMessage: string,
+    departureTime?: Date | null,
+    trafficAware = true,
+    alternatives = false,
+  ): Promise<RoutesApiRoute[]> {
     const toWaypoint = (c: Coordinates) => ({
       location: { latLng: { latitude: c.lat, longitude: c.lon } },
     });
@@ -458,6 +516,9 @@ export class GoogleMapsService {
 
     if (intermediates.length > 0) {
       body.intermediates = intermediates.map(toWaypoint);
+    }
+    if (alternatives && intermediates.length === 0) {
+      body.computeAlternativeRoutes = true;
     }
 
     // TRAFFIC_AWARE uses real-time traffic (departure time defaults to now);
@@ -494,7 +555,7 @@ export class GoogleMapsService {
       throw new Error(`${errorMessage}: ZERO_RESULTS`);
     }
 
-    return data.routes[0];
+    return data.routes;
   }
 
   /**

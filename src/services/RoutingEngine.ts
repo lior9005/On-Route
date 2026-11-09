@@ -16,6 +16,7 @@ import { CONFIG } from "../constants/config";
 import { haversineDistance } from "../utils/distance";
 import { decodePolyline } from "../utils/polylineDecoder";
 import { encodePolyline, routeSectionNear } from "../utils/routeSection";
+import { isHighwayStop } from "../utils/highwayStops";
 import {
   buildStreetCandidates,
   closestRouteCandidate,
@@ -125,8 +126,16 @@ export class RoutingEngine {
         }))
       : [];
 
-    // Step 2: Candidate points - transit stops and small-street points
-    const stopCandidates: RawCandidate[] =
+    // Step 2: Candidate points - transit stops and small-street points.
+    // Stops on a motorway (e.g. inside the Ayalon) are dropped: a car can't stop there
+    const motorwayClasses = new Set<string>(CONFIG.MOTORWAY_CLASSES);
+    const motorways =
+      streetsResult.status === "fulfilled"
+        ? streetsResult.value.bigRoads
+            .filter((road) => motorwayClasses.has(road.highway))
+            .map((road) => road.geometry)
+        : [];
+    const allStops: RawCandidate[] =
       stopsResult.status === "fulfilled"
         ? stopsResult.value.map((place) => ({
             id: place.id,
@@ -135,6 +144,8 @@ export class RoutingEngine {
             kind: "BUS_STOP" as const,
           }))
         : [];
+    const stopCandidates = allStops.filter((c) => !isHighwayStop(c, motorways));
+    const highwayStops = allStops.length - stopCandidates.length;
 
     const streetCandidates: RawCandidate[] = [];
     if (streetsResult.status === "fulfilled") {
@@ -198,7 +209,8 @@ export class RoutingEngine {
     ];
 
     const info: SearchInfo = {
-      busStops: stopCandidates.length,
+      busStops: allStops.length,
+      onHighway: highwayStops,
       busStopError:
         stopsResult.status === "rejected" ? errorText(stopsResult.reason) : undefined,
       streetPoints: streetCandidates.length,
@@ -399,11 +411,17 @@ export class RoutingEngine {
     }
     const stops: RawCandidate[] = [];
     const seenStops = new Set<string>();
+    let highwayStops = 0;
     for (const search of searches) {
       if (search.status !== "fulfilled") continue;
       for (const place of search.value) {
         if (seenStops.has(place.id)) continue;
         seenStops.add(place.id);
+        // No road data in bus mode: only stops named as Ayalon stops are known
+        if (isHighwayStop(place)) {
+          highwayStops++;
+          continue;
+        }
         stops.push({
           id: place.id,
           location: place.location,
@@ -412,7 +430,8 @@ export class RoutingEngine {
         });
       }
     }
-    info.busStops = stops.length;
+    info.busStops = stops.length + highwayStops;
+    info.onHighway = highwayStops;
 
     // Step 3: Pre-select without API calls - estimated detour within budget,
     // best estimated driver + bus time first, capped for cost
@@ -633,6 +652,34 @@ export function suggestWalkingLimit(
   return step ? step.maxWalk : null;
 }
 
+/**
+ * Rows the walking table shows: the first step with a spot, then only steps
+ * whose spot is at least DRIVE_TIME_TIE_SECONDS faster than the last row
+ * shown (a longer walk that saves only seconds isn't worth a row), plus the
+ * suggested step
+ */
+export function walkingTradeoffRows(
+  tradeoff: WalkingTradeoffStep[],
+  currentLimit: number | null,
+): WalkingTradeoffStep[] {
+  const rows: WalkingTradeoffStep[] = [];
+  for (const step of tradeoff) {
+    if (!step.best || step.bestDriveTime === null) continue;
+    const last = rows[rows.length - 1];
+    if (step.maxWalk === currentLimit) {
+      // Same spot as the last row: show it once, marked as suggested
+      if (last && last.best!.id === step.best.id) rows.pop();
+      rows.push(step);
+    } else if (
+      !last ||
+      last.bestDriveTime! - step.bestDriveTime >= CONFIG.DRIVE_TIME_TIE_SECONDS
+    ) {
+      rows.push(step);
+    }
+  }
+  return rows;
+}
+
 /** Best driving time for each walking limit, in TRADEOFF_STEP_METERS steps up to maxRadius (always included) */
 export function buildWalkingTradeoff(
   routed: CandidatePoint[],
@@ -680,6 +727,7 @@ export function describeSearch(info: SearchInfo): string {
       : plural(info.streetPoints, "street point"),
   ];
   const dropped = [
+    info.onHighway && `${info.onHighway} on a highway`,
     info.tooFarToWalk && `${info.tooFarToWalk} too far to walk`,
     info.movedToOtherRoad && `${info.movedToOtherRoad} on another road`,
     info.routeErrors && `${info.routeErrors} route errors`,
@@ -709,6 +757,7 @@ function describeTransitSearch(info: SearchInfo): string {
     .filter((reason) => info.transitRejections?.[reason])
     .map((reason) => `${info.transitRejections![reason]} ${TRANSIT_REJECTION_TEXT[reason]}`);
   if (info.routeErrors) dropped.push(`${info.routeErrors} route errors`);
+  if (info.onHighway) dropped.unshift(`${info.onHighway} on a highway`);
 
   return (
     `Found ${plural(info.busStops, "bus stop")} along ` +

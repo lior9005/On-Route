@@ -21,7 +21,10 @@ export function meetingPointTerm(direction?: TripDirection): string {
 }
 
 export interface BusTripText {
-  title: string; // e.g. "🚌 Passenger Bus · 37 min trip (dropped off 15:56 → at destination 16:33)"
+  // e.g. "🚌 Passenger Bus · 37 min trip (dropped off 15:56 → bus arrives 16:25 → at destination 16:33)".
+  // "At destination" includes the walk after the bus; apps like Moovit show
+  // the bus's own arrival, so both are named
+  title: string;
   lines: string[];
 }
 
@@ -51,7 +54,7 @@ export function describeBusTrip(candidate: CandidatePoint): BusTripText | null {
     ).toISOString();
     span =
       direction === 'DROP_OFF'
-        ? ` (dropped off ${formatClock(candidate.meetTime)} → at destination ${formatClock(other)})`
+        ? ` (dropped off ${formatClock(candidate.meetTime)} → bus arrives ${formatClock(transit.arrivalTime)} → at destination ${formatClock(other)})`
         : ` (leaves home ${formatClock(other)} → meets driver ${formatClock(candidate.meetTime)})`;
   }
 

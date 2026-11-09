@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { CandidatePoint, WalkingTradeoffStep } from '../models';
 import { secondsToMinutes } from '../utils/distance';
 import { meetingPointLabel } from './CandidateList';
+import { walkingTradeoffRows } from '../services/RoutingEngine';
 
 interface WalkingTradeoffProps {
   tradeoff: WalkingTradeoffStep[];
@@ -23,12 +24,7 @@ export function WalkingTradeoff({ tradeoff, currentLimit, directDriveTime, selec
     return null;
   }
 
-  const rows = tradeoff.filter((s, i) => {
-    if (!s.best) return false;
-    if (s.maxWalk === currentLimit) return true;
-    const prev = tradeoff[i - 1];
-    return !prev || prev.best?.id !== s.best.id;
-  });
+  const rows = walkingTradeoffRows(tradeoff, currentLimit);
 
   return (
     <View style={styles.container}>

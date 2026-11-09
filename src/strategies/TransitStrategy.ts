@@ -261,9 +261,16 @@ export class TransitStrategy {
     if (onTime.ok || maxDriverWaitSeconds <= 0) return onTime;
     if (onTime.reason !== 'CANT_MAKE_IT' && onTime.reason !== 'NO_SPARE_TIME') return onTime;
 
-    // Too soon for the hitchhiker: take the earliest bus they can catch and
-    // let the driver wait for them (within the allowed wait)
-    const earliestDeparture = new Date(now.getTime() + this.limits.departureBufferSeconds * 1000);
+    // Too soon for the hitchhiker: take the earliest useful bus they can
+    // catch and let the driver wait for them (within the allowed wait). For a
+    // planned ride that is around the meeting, not now: a bus leaving more
+    // than a whole trip before the driver arrives would have been on time
+    const earliestDeparture = new Date(
+      Math.max(
+        now.getTime() + this.limits.departureBufferSeconds * 1000,
+        driverArrival.getTime() - this.limits.maxTripSeconds * 1000,
+      ),
+    );
     const routes = await this.googleMapsService.computeTransitRoutes(passengerHome, meetingPoint, {
       departureTime: earliestDeparture,
     });

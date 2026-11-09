@@ -59,6 +59,8 @@ export interface RawCandidate {
 export interface SearchInfo {
   busStops: number;
   busStopError?: string;
+  /** Bus stops dropped because they are on a motorway (a car can't stop there) */
+  onHighway?: number;
   streetPoints: number;
   streetError?: string;
   evaluated: number; // Candidates sent to Google after pre-filtering

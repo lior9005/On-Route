@@ -15,6 +15,7 @@ import {
 import { CONFIG } from "../constants/config";
 import { haversineDistance } from "../utils/distance";
 import { decodePolyline } from "../utils/polylineDecoder";
+import { encodePolyline, routeSectionNear } from "../utils/routeSection";
 import {
   buildStreetCandidates,
   closestRouteCandidate,
@@ -94,7 +95,9 @@ export class RoutingEngine {
           maxConstraint,
         ),
         this.osmService.fetchStreetNetwork(passengerHome, maxConstraint),
-        this.googleMapsService.fetchBaselineRoute(start, end, departureTime),
+        // Full traffic model, like the finalists' routes in step 7, so the
+        // time added vs. the direct drive compares like with like
+        this.googleMapsService.fetchBaselineRoute(start, end, departureTime, true),
       ]);
 
     if (
@@ -286,7 +289,8 @@ export class RoutingEngine {
       }
     }
 
-    // Step 7: Re-route only the finalists with traffic; everything below
+    // Step 7: Re-route only the finalists with the full traffic model
+    // (TRAFFIC_AWARE_OPTIMAL, as in the Google Maps app); everything below
     // compares traffic times only (keep the estimates if none come back)
     const finalists = pickTrafficFinalists(validCandidates, maxConstraint);
     const trafficResults = await Promise.allSettled(
@@ -296,6 +300,8 @@ export class RoutingEngine {
           c.coordinates,
           end,
           departureTime,
+          true,
+          true,
         );
         const totalDetour =
           detourRoute.leg1.duration + detourRoute.leg2.duration;
@@ -338,14 +344,16 @@ export class RoutingEngine {
     const departureTime = params.departureTime ?? null;
     const leaveAt = departureTime ? departureTime.getTime() : Date.now();
 
-    // Step 1: The driver's normal route (needed to search along it)
-    const baseline = await this.googleMapsService.fetchBaselineRoute(
-      start,
-      end,
-      departureTime,
-    );
+    // Step 1: The driver's possible routes (Google's main route and its
+    // alternatives, full traffic model), and the direct drive time with the
+    // same traffic model as the detour routes, so extra driving compares
+    // like with like
+    const [driveRoutes, baseline] = await Promise.all([
+      this.googleMapsService.fetchDriveRoutes(start, end, departureTime),
+      this.googleMapsService.fetchBaselineRoute(start, end, departureTime),
+    ]);
 
-    // Step 2: Bus stops along that route
+    // Step 2: Bus stops along the part of each route near the passenger
     const info: SearchInfo = {
       busStops: 0,
       streetPoints: 0,
@@ -354,28 +362,55 @@ export class RoutingEngine {
       movedToOtherRoad: 0,
       routeErrors: 0,
       transitRejections: {},
+      driveRoutes: driveRoutes.length,
     };
     this.lastSearchInfo = info;
     const reject = (reason: TransitRejection) => {
       info.transitRejections![reason] = (info.transitRejections![reason] ?? 0) + 1;
     };
 
-    let stops: RawCandidate[] = [];
-    try {
-      stops = (
-        await this.googleMapsService.searchBusStopsAlongRoute(
-          baseline.polyline,
+    const searchPolylines = driveRoutes.map((route) => {
+      const routeNearPassenger = routeSectionNear(
+        decodePolyline(route.polyline).map((p) => ({
+          lat: p.latitude,
+          lon: p.longitude,
+        })),
+        passengerHome,
+        CONFIG.BUS_STOP_SEARCH_RADIUS_METERS,
+      );
+      return routeNearPassenger.length >= 2
+        ? encodePolyline(routeNearPassenger)
+        : route.polyline;
+    });
+
+    const searches = await Promise.allSettled(
+      searchPolylines.map((polyline) =>
+        this.googleMapsService.searchBusStopsAlongRoute(
+          polyline,
           CONFIG.BUS_STOP_SEARCH_PAGES,
-        )
-      ).map((place) => ({
-        id: place.id,
-        location: place.location,
-        name: place.name,
-        kind: "BUS_STOP" as const,
-      }));
-    } catch (err) {
+        ),
+      ),
+    );
+    // Fail only if every route's search failed
+    if (searches.every((r) => r.status === "rejected")) {
+      const err = (searches[0] as PromiseRejectedResult).reason;
       info.busStopError = errorText(err);
       throw err;
+    }
+    const stops: RawCandidate[] = [];
+    const seenStops = new Set<string>();
+    for (const search of searches) {
+      if (search.status !== "fulfilled") continue;
+      for (const place of search.value) {
+        if (seenStops.has(place.id)) continue;
+        seenStops.add(place.id);
+        stops.push({
+          id: place.id,
+          location: place.location,
+          name: place.name,
+          kind: "BUS_STOP" as const,
+        });
+      }
     }
     info.busStops = stops.length;
 
@@ -667,7 +702,7 @@ const TRANSIT_REJECTION_TEXT: Record<TransitRejection, string> = {
 };
 
 /**
- * Bus mode summary, e.g. "Found 32 bus stops along the route; compared the best 15 (6 no direct bus)"
+ * Bus mode summary, e.g. "Found 32 bus stops along 3 driving routes; compared the best 15 (6 no direct bus)"
  */
 function describeTransitSearch(info: SearchInfo): string {
   const dropped = (Object.keys(TRANSIT_REJECTION_TEXT) as TransitRejection[])
@@ -676,7 +711,9 @@ function describeTransitSearch(info: SearchInfo): string {
   if (info.routeErrors) dropped.push(`${info.routeErrors} route errors`);
 
   return (
-    `Found ${plural(info.busStops, "bus stop")} along the route; compared the best ${info.evaluated}` +
+    `Found ${plural(info.busStops, "bus stop")} along ` +
+    ((info.driveRoutes ?? 1) > 1 ? `${info.driveRoutes} driving routes` : "the route") +
+    `; compared the best ${info.evaluated}` +
     (dropped.length ? ` (${dropped.join(", ")})` : "")
   );
 }

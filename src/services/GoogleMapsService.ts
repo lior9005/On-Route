@@ -85,6 +85,7 @@ export class GoogleMapsService {
     start: Coordinates,
     end: Coordinates,
     departureTime?: Date | null,
+    optimal = false,
   ): Promise<BaselineRoute> {
     const route = await this.computeRoute(
       start,
@@ -94,8 +95,43 @@ export class GoogleMapsService {
       "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
       "Failed to fetch baseline route",
       departureTime,
+      true,
+      optimal,
     );
 
+    return this.toBaselineRoute(route);
+  }
+
+  /**
+   * The driver's possible routes from start to end: Google's main route plus
+   * its alternatives (up to 3 in all), fastest first. Uses the full traffic
+   * model (TRAFFIC_AWARE_OPTIMAL, Enterprise billing): the simplified
+   * TRAFFIC_AWARE model left out e.g. the Ayalon route for Hadera → Eilat
+   */
+  async fetchDriveRoutes(
+    start: Coordinates,
+    end: Coordinates,
+    departureTime?: Date | null,
+  ): Promise<BaselineRoute[]> {
+    const routes = await this.computeRoutes(
+      start,
+      end,
+      [],
+      "DRIVE",
+      "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+      "Failed to fetch baseline route",
+      departureTime,
+      true,
+      true,
+      true,
+    );
+    return routes
+      .map((r) => this.toBaselineRoute(r))
+      .filter((r) => r.polyline)
+      .sort((a, b) => a.duration - b.duration);
+  }
+
+  private toBaselineRoute(route: RoutesApiRoute): BaselineRoute {
     return {
       polyline: route.polyline?.encodedPolyline ?? "",
       duration: this.parseDuration(route.duration),
@@ -255,8 +291,8 @@ export class GoogleMapsService {
       | Array<{ kind: "WALK" | "BUS"; polyline: string }>
       | undefined;
 
-    // Fetch the detour route with per-leg polylines (with traffic at the
-    // planned time, same as the search)
+    // Fetch the detour route with per-leg polylines (full traffic model at
+    // the planned time, as in the Google Maps app)
     // and, for walking candidates, the walking route to the passenger in parallel
     const [detourRoute, walkingRoute] = await Promise.all([
       this.computeRoute(
@@ -267,6 +303,8 @@ export class GoogleMapsService {
         "routes.legs.polyline.encodedPolyline",
         "Failed to fetch route visualization",
         departureTime,
+        true,
+        true,
       ),
       transitSegments
         ? Promise.resolve(null)
@@ -350,6 +388,8 @@ export class GoogleMapsService {
     end: Coordinates,
     departureTime?: Date | null,
     trafficAware = true,
+    /** Full traffic model (TRAFFIC_AWARE_OPTIMAL, Enterprise billing) */
+    optimal = false,
   ): Promise<DetourRoute> {
     const route = await this.computeRoute(
       start,
@@ -360,6 +400,7 @@ export class GoogleMapsService {
       "Failed to compute detour route",
       departureTime,
       trafficAware,
+      optimal,
     );
 
     const legs = route.legs ?? [];
@@ -445,7 +486,40 @@ export class GoogleMapsService {
     errorMessage: string,
     departureTime?: Date | null,
     trafficAware = true,
+    optimal = false,
   ): Promise<RoutesApiRoute> {
+    const routes = await this.computeRoutes(
+      origin,
+      destination,
+      intermediates,
+      travelMode,
+      fieldMask,
+      errorMessage,
+      departureTime,
+      trafficAware,
+      false,
+      optimal,
+    );
+    return routes[0];
+  }
+
+  /**
+   * Compute routes via the Routes API (computeRoutes); with `alternatives`,
+   * Google may add up to two alternative routes (not with intermediates)
+   */
+  private async computeRoutes(
+    origin: Coordinates,
+    destination: Coordinates,
+    intermediates: Coordinates[],
+    travelMode: TravelMode,
+    fieldMask: string,
+    errorMessage: string,
+    departureTime?: Date | null,
+    trafficAware = true,
+    alternatives = false,
+    /** Full traffic model, as in the Google Maps app: finds more alternatives, billed higher */
+    optimal = false,
+  ): Promise<RoutesApiRoute[]> {
     const toWaypoint = (c: Coordinates) => ({
       location: { latLng: { latitude: c.lat, longitude: c.lon } },
     });
@@ -459,6 +533,9 @@ export class GoogleMapsService {
     if (intermediates.length > 0) {
       body.intermediates = intermediates.map(toWaypoint);
     }
+    if (alternatives && intermediates.length === 0) {
+      body.computeAlternativeRoutes = true;
+    }
 
     // TRAFFIC_AWARE uses real-time traffic (departure time defaults to now);
     // routing preference is only allowed for driving. TRAFFIC_UNAWARE is
@@ -466,7 +543,7 @@ export class GoogleMapsService {
     if (travelMode === "DRIVE" && !trafficAware) {
       body.routingPreference = "TRAFFIC_UNAWARE";
     } else if (travelMode === "DRIVE") {
-      body.routingPreference = "TRAFFIC_AWARE";
+      body.routingPreference = optimal ? "TRAFFIC_AWARE_OPTIMAL" : "TRAFFIC_AWARE";
       // Planned rides: predicted traffic at that time (must be in the future)
       if (departureTime && departureTime.getTime() > Date.now() + 60_000) {
         body.departureTime = departureTime.toISOString();
@@ -494,7 +571,7 @@ export class GoogleMapsService {
       throw new Error(`${errorMessage}: ZERO_RESULTS`);
     }
 
-    return data.routes[0];
+    return data.routes;
   }
 
   /**

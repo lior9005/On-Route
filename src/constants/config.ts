@@ -19,6 +19,9 @@ export const CONFIG = {
   BIG_ROAD_CLASSES: ["motorway", "trunk", "primary", "secondary", "tertiary"],
   STREET_SAMPLE_INTERVAL_METERS: 100, // One candidate point every 100m of street
   BIG_ROAD_BUFFER_METERS: 30, // Skip street points this close to a big road
+  /** Bus stops this close to a motorway (e.g. the Ayalon) are not meeting points: a car can't stop there */
+  MOTORWAY_CLASSES: ["motorway"],
+  MOTORWAY_STOP_BUFFER_METERS: 25,
   ON_ROUTE_THRESHOLD_METERS: 25, // Point counts as on the driver's route within this distance
   MAX_SNAP_DISTANCE_METERS: 20, // Drop street points Google snaps further than this
   MAX_CANDIDATES_TO_EVALUATE: 15, // Candidates sent to Google APIs per search

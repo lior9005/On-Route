@@ -44,12 +44,12 @@ The web app calls every API directly from the browser, so each one must allow CO
 ## Meeting point search: walk mode (RoutingEngine.optimizeWalking)
 
 1. In parallel: transit stops near the passenger (Places), small streets and big roads (OpenFreeMap), and the driver's normal route A→C. Names are in Hebrew: Places and transit requests use `languageCode: "iw"` (`PLACE_NAMES_LANGUAGE`, bus mode too), OSM streets their local `name`.
-2. Street points: corners (3+ distinct directions meeting) plus one point every 100 m. Points within 30 m of a big road (`tertiary` and above) are dropped. Small streets = class `minor`. Also add the spot on the driver's route closest to the passenger.
+2. Street points: corners (3+ distinct directions meeting) plus one point every 100 m. Points within 30 m of a big road (`tertiary` and above) are dropped. Small streets = class `minor`. Also add the spot on the driver's route closest to the passenger. Bus stops within 25 m of a `motorway`, or named as Ayalon stops (`כביש 20`, `נתיבי איילון`), are dropped: a car can't stop there (`isHighwayStop`).
 3. Pre-select without API calls: straight line within 75% of the walking limit, merge points within 100 m, rank by estimated detour (closest-on-route first), keep the best 15. Short walks (≤ 400 m) get 8 more of their own, so the trade-off table has data at the short end.
 4. Real walking distance with one Route Matrix request (WALK); drop anything over the limit.
 5. Detour route A→point→C per candidate (TRAFFIC_UNAWARE, cheaper); the best 6 (`TRAFFIC_FINALISTS_COUNT`) are re-routed with `TRAFFIC_AWARE_OPTIMAL`, and so is the direct A→C drive they are compared with. Drop street points that Google snaps more than 20 m away (probably a bigger road).
 6. Trade-off: for each 100 m walking step up to the limit, the fastest point (`buildWalkingTradeoff`). There is no walking slider: the limit is always `WALK_SEARCH_DISTANCE` (1 km). The suggested step is the shortest one within 60 s of the fastest (`suggestWalkingLimit`).
-7. The results modal shows only the "Walk more, drive less?" table (`WalkingTradeoff`): one row per step where the fastest point changes, naming that point, with its drive time and the time added vs. the direct A→C drive (`lastDirectDriveTime`), the suggested row marked; tapping a row opens its preview. `selectWalkingCandidates` (rank with the 60 s tie rule, merge within 100 m or by name, top 3) still fills `candidates`, which keeps the modal open.
+7. The results modal shows only the "Walk more, drive less?" table (`WalkingTradeoff`): one row per step that is at least 60 s faster than the row above, plus the suggested step (`walkingTradeoffRows`), naming that point, with its drive time and the time added vs. the direct A→C drive (`lastDirectDriveTime`), the suggested row marked; tapping a row opens its preview. `selectWalkingCandidates` (rank with the 60 s tie rule, merge within 100 m or by name, top 3) still fills `candidates`, which keeps the modal open.
 
 ## Meeting point search: bus mode (RoutingEngine.optimizeTransit)
 
@@ -63,14 +63,14 @@ The form has a Walk / Bus switch. Bus mode also has a Drop-off / Pick-up switch 
 4. Bus trip: Routes API `TRANSIT` with bus only, `FEWER_TRANSFERS` and alternatives.
    - **Drop-off:** stop→home with `departureTime = T + 5 min`.
    - **Pick-up:** home→stop with `arrivalTime = T − 5 min`.
-   - **Pick-up fallback, driver waits:** if the hitchhiker can't make it in time, request the earliest bus (`departureTime = now + 2 min`). They meet at max(T, hitchhiker at the stop + 5 min). The driver's wait plus the extra driving must fit within "Max extra driving", and the wait counts in the combined ranking (`evaluatePickupWithDriverWait`).
+   - **Pick-up fallback, driver waits:** if the hitchhiker can't make it in time, request the earliest useful bus (`departureTime = max(now + 2 min, T − 40 min)`, so planned rides search around the meeting, not now). They meet at max(T, hitchhiker at the stop + 5 min). The driver's wait plus the extra driving must fit within "Max extra driving", and the wait counts in the combined ranking (`evaluatePickupWithDriverWait`).
 5. Rules (`config.ts` `TRANSIT_*`):
    - exactly one bus, no transfers;
    - walking ≤ 800 m;
    - 5 min spare time: the bus leaves ≥ 5 min after the drop-off, or the hitchhiker arrives ≥ 5 min before the car;
    - pick-up: the hitchhiker must not need to leave within 2 min of now;
    - trip ≤ 40 min, waiting included.
-6. Rank by extra driving + bus trip (`rankByCombinedTime`), merge within 100 m, show the top 3. The meeting point is labeled "Near *stop*", because a car should not stop inside a bus stop.
+6. Rank by extra driving + bus trip (`rankByCombinedTime`), merge within 100 m, show the top 3. The meeting point is labeled "Near *stop*", because a car should not stop inside a bus stop. Stops named as Ayalon stops are skipped (bus mode has no road data). A drop-off card shows "dropped off → bus arrives → at destination": the last time includes the walk after the bus, which apps like Moovit leave out.
 
 Failures degrade instead of breaking: no street data means bus stops only, and the reverse. `SearchInfo` / `describeSearch` produces the grey summary line under the results; ask users for that line when debugging.
 
